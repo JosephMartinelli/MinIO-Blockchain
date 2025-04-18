@@ -1,0 +1,15 @@
+services:
+  minio:
+    tty: true
+    container_name: "minio_local"
+    image: quay.io/minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - "./Minio_folder:/data"
+      - "./config.env:/etc/config.env"
+    environment:
+      MINIO_CONFIG_ENV_FILE: "/etc/config.env"
+    command: server /data --console-address ":9001"
+
