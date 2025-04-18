@@ -16,11 +16,11 @@ class Block:
         transactions: list[dict],
         timestamp: datetime | str,
         previous_hash: str,
-        proof: int = 0
+        proof: int = 0,
     ):
         self.index = index
         self.transactions = transactions
-        if isinstance(timestamp,datetime):
+        if isinstance(timestamp, datetime):
             self.timestamp = timestamp.strftime("%d/%m/%y %H:%M:%S.%f")
         else:
             self.timestamp = timestamp
@@ -37,7 +37,7 @@ class Block:
 
 
 class BlockChain:
-    def __init__(self, difficulty: int,genesis_block: Block = None):
+    def __init__(self, difficulty: int, genesis_block: Block = None):
         self.chain: [Block] = []
         if genesis_block:
             self.chain.append(genesis_block)
@@ -143,13 +143,17 @@ class BlockChain:
                 return False
         return True
 
-    def add_block(self,new_block: Block):
+    def add_block(self, new_block: Block):
         last_block = self.get_last_bloc
         if new_block.index != (last_block.index + 1):
-            raise IndexError(f"Current index is {last_block.index}, but the index passed is {new_block.index}")
+            raise IndexError(
+                f"Current index is {last_block.index}, but the index passed is {new_block.index}"
+            )
         if last_block.compute_hash() != new_block.previous_hash:
-            print(last_block.compute_hash(),"\n",new_block.previous_hash)
-            raise ValueError("The passed hash is not consistent with the hash of the last block")
+            print(last_block.compute_hash(), "\n", new_block.previous_hash)
+            raise ValueError(
+                "The passed hash is not consistent with the hash of the last block"
+            )
         digested_data = self.digest_proof_and_transactions(
             next_proof=new_block.proof,
             previous_proof=last_block.proof,
@@ -160,5 +164,3 @@ class BlockChain:
         if not block_hash.startswith("0" * self.difficulty):
             raise ValueError("Block hash is not consistent with chain difficulty")
         self.chain.append(new_block)
-
-
