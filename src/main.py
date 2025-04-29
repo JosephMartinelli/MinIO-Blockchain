@@ -1,15 +1,16 @@
 import json
 
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
 from starlette.responses import JSONResponse
 import requests
 from blockchain import BlockChain, Block
 import os
 
+from validation import UnconfirmedTransactions, RegisterNode, Client, InputBlock
 
 app = FastAPI()
-blockchain: BlockChain = BlockChain(difficulty=5)
+difficulty: int = os.environ.get("difficulty", 7)
+blockchain: BlockChain = BlockChain(difficulty=difficulty)
 peers = set()
 port = os.environ.get("port", 8000)
 
@@ -19,25 +20,11 @@ async def get_chain() -> list:
     return [x.__dict__ for x in blockchain.chain]
 
 
-class UnconfirmedTransactions(BaseModel):
-    transactions: list[list] | list[dict]
-
-
 @app.post("/register-transactions", status_code=200)
 async def add_new_transactions(transactions: UnconfirmedTransactions):
     transactions = transactions.model_dump()
     blockchain.add_new_transaction(transactions["transactions"])
     return JSONResponse(status_code=200, content="Transactions added successfully")
-
-
-class RegisterNode(BaseModel):
-    node_address: str
-    node_port: str
-
-
-class Client(BaseModel):
-    ip_address: str
-    port: str
 
 
 @app.post("/register-node", status_code=201)
@@ -109,14 +96,6 @@ async def register_with_node(node_to_regiser: RegisterNode, request: Request):
     )
 
 
-class InputBlock(BaseModel):
-    transactions: list[list]
-    index: int
-    timestamp: str
-    previous_hash: str
-    proof: int
-
-
 @app.post(path="/add-block", status_code=201)
 async def add_block(in_block: InputBlock):
     global blockchain
@@ -138,9 +117,9 @@ async def add_block(in_block: InputBlock):
 
 def create_blockchain_from_request(data: list[dict]) -> BlockChain:
     if len(data) == 1:
-        blockchain = BlockChain(5, genesis_block=Block(**data[0]))
+        blockchain = BlockChain(difficulty, genesis_block=Block(**data[0]))
     else:
-        blockchain = BlockChain(5)
+        blockchain = BlockChain(difficulty)
         for block in data[1:]:
             blockchain.chain.append(Block(**block))
     if not blockchain.is_chain_valid():
