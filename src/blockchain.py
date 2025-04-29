@@ -150,7 +150,6 @@ class BlockChain:
                 f"Current index is {last_block.index}, but the index passed is {new_block.index}"
             )
         if last_block.compute_hash() != new_block.previous_hash:
-            print(last_block.compute_hash(), "\n", new_block.previous_hash)
             raise ValueError(
                 "The passed hash is not consistent with the hash of the last block"
             )

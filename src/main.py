@@ -51,6 +51,8 @@ async def register_node(client: Client):
         return JSONResponse(
             status_code=404, content="Node address cannot be an empty field!"
         )
+    global peers
+    to_return_peers = peers.copy()
     if not peers.intersection(f"{client['ip_address']}:{client['port']}"):
         peers.add(f"{client['ip_address']}:{client['port']}")
     else:
@@ -58,7 +60,7 @@ async def register_node(client: Client):
             status_code=400, content="Client already present into peers!"
         )
     chain = await get_chain()
-    return {"chain": chain, "peers": list(peers)}
+    return {"chain": chain, "peers": list(to_return_peers)}
 
 
 @app.post(path="/register-with-node", status_code=200)
@@ -67,7 +69,16 @@ async def register_with_node(node_to_regiser: RegisterNode, request: Request):
     This function register with an existing node, and it syncs with the blockchain that the node has
     :return:
     """
+    global blockchain, peers
     node_info = node_to_regiser.model_dump()
+    if (
+        len(peers.intersection(f"{node_info['node_address']}:{node_info['node_port']}"))
+        == 1
+    ):
+        return JSONResponse(
+            status_code=400,
+            content=f"This node is already registered with {node_info['node_address']}",
+        )
     # Register with node
     try:
         response = requests.post(
@@ -85,30 +96,17 @@ async def register_with_node(node_to_regiser: RegisterNode, request: Request):
             content=f"Could not register with node at {node_info['node_address']}\n, {response.content}",
         )
     # If I could register, then I update my local view of the blockchain
-    global blockchain, peers
     data = response.json()
-    peers.update(data["peers"])
+    peers.update(set(data["peers"]))
+    # Then I add to my peers the node that I am registering to
+    peers.add(f"{node_info['node_address']}:{node_info['node_port']}")
+    # Updating local view of the blockchain
+    blockchain = create_blockchain_from_request(data["chain"])
     return JSONResponse(
         status_code=200,
         content=f"Successfully registered to node {node_info['node_address']}, and now I can see the following"
-        f"peers: {peers}",
+        f" peers: {peers}",
     )
-
-
-def create_blockchain_from_request(data: list[dict]) -> BlockChain:
-    if len(data) == 1:
-        blockchain = BlockChain(5, genesis_block=Block(**data[0]))
-    else:
-        blockchain = BlockChain(5)
-        for block in data[1:]:
-            blockchain.chain.append(Block(**block))
-    if not blockchain.is_chain_valid():
-        raise RuntimeError("Blockchain has been tampered!")
-    return blockchain
-
-
-def consesus():
-    pass
 
 
 class InputBlock(BaseModel):
@@ -138,13 +136,52 @@ async def add_block(in_block: InputBlock):
         )
 
 
+def create_blockchain_from_request(data: list[dict]) -> BlockChain:
+    if len(data) == 1:
+        blockchain = BlockChain(5, genesis_block=Block(**data[0]))
+    else:
+        blockchain = BlockChain(5)
+        for block in data[1:]:
+            blockchain.chain.append(Block(**block))
+    if not blockchain.is_chain_valid():
+        raise RuntimeError("Blockchain has been tampered!")
+    return blockchain
+
+
+async def consesus():
+    """
+    This function will check all the peers of a given node and will try to figure out who has the longest valid chain.
+    When found, all the nodes will swap their chain with the longest chain found since it is considered the most updated
+    one.
+    :return:
+    """
+    max_length = 0
+    max_chain = []
+    for indx, peer in enumerate(peers):
+        # Get peer chain
+        peer_chain = requests.get(url=f"http://{peer}/")
+        if peer_chain.status_code != 200:
+            raise RuntimeError("Could not get peer chain")
+        if len(peer_chain.json()) > max_length:
+            max_length = len(peer_chain.json())
+            max_chain = peer_chain
+
+    # Found the maximum chain we get that chain
+    create_blockchain_from_request(max_chain.json())
+
+
 @app.get("/mine", status_code=200)
 async def mine() -> str:
     result = blockchain.mine()
     if isinstance(result, bool) and not result:
         return "No uncommitted transactions are present!"
     else:
-        announce_new_block()
+        # If we have the longest valid chain, than we need to announce the new block we have mined so that the
+        # others node can add it
+        current_chain_length: int = len(blockchain.chain)
+        await consesus()
+        if current_chain_length == len(blockchain.chain):
+            announce_new_block()
         return result
 
 
