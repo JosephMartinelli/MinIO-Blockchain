@@ -1,8 +1,14 @@
 from pydantic import BaseModel
 
 
-class UnconfirmedTransactions(BaseModel):
-    transactions: list[list] | list[dict]
+class Transaction(BaseModel):
+    data: list[str | bytes] = []
+    is_contract: bool = False
+    contract_address: str = ""
+
+
+class UnconfirmedTransaction(BaseModel):
+    transactions: list[Transaction] = []
 
 
 class RegisterNode(BaseModel):

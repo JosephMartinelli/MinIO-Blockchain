@@ -9,14 +9,17 @@ import json
 import hashlib
 
 
+from .smart_contract import SmartContract
+
+
 class Block:
     def __init__(
         self,
         index: int,
-        transactions: list[dict],
         timestamp: datetime | str,
         previous_hash: str,
         proof: int = 0,
+        transactions: list[dict] = None,
     ):
         self.index = index
         self.transactions = transactions
@@ -38,23 +41,27 @@ class Block:
 
 class BlockChain:
     def __init__(self, difficulty: int, genesis_block: Block = None):
-        self.chain: [Block] = []
+        self.chain: list[Block] = []
         if genesis_block:
             self.chain.append(genesis_block)
         else:
             self.create_genesis_block()
         self.difficulty = difficulty  # This is the difficulty of the PoW algorithm into the calculating the nonce
-        self.unconfirmed_transactions = (
+        self.unconfirmed_transactions: list[dict] = (
             []
         )  # Pool of transaction that need to be validated (or mined)
 
     def create_genesis_block(self):
-        genesis_block = Block(0, [], datetime.now(), "0")
+        genesis_block = Block(0, datetime.now(), "0")
         genesis_block.previous_hash = 0
         self.chain.append(genesis_block)
 
+    @staticmethod
     def digest_proof_and_transactions(
-        self, previous_proof: int, next_proof: int, index: int, transactions: []
+        previous_proof: int,
+        next_proof: int,
+        index: int,
+        transactions: list[dict],
     ) -> bytes:
         math_proof = str(previous_proof**2 - next_proof**2 + index).encode()
         transaction_data = json.dumps(transactions).encode()
@@ -69,7 +76,7 @@ class BlockChain:
         previous_proof = self.get_last_bloc.proof
         current_index = len(self.chain)
         while True:
-            digested_data = self.digest_proof_and_transactions(
+            digested_data = BlockChain.digest_proof_and_transactions(
                 previous_proof=previous_proof,
                 next_proof=block_to_calculate_proof.proof,
                 index=current_index,
@@ -80,16 +87,45 @@ class BlockChain:
                 break
             block_to_calculate_proof.proof += 1
 
+    def are_transactions_valid(self):
+        return True
+
+    def add_new_transaction(self, data: list[dict]):
+        self.unconfirmed_transactions += data
+
     def mine(self):
         """
         This function adds pending transactions to a block and figures
-        out the proof of work
+        out the proof of work.
+        For the time being we do not allow contracts to call other contracts
         :return:
         """
         # This is the case no transaction is available
         if not self.unconfirmed_transactions:
             return False
 
+        # Checking if the transactions are valid
+        if not self.are_transactions_valid():
+            return False
+
+        # We check each transaction for:
+        # 1. If it is a contract, then we calculate the contract address by hashing the bytecode
+        # 2. Checking if the transaction refers a contract, if it is then the contract is fetched, decoded and executed
+        # 3. If it refers no contract, then we do nothing
+        for transaction in self.unconfirmed_transactions:
+            print(transaction)
+            if transaction["is_contract"] and not transaction["contract_address"]:
+                transaction["contract_address"] = hashlib.sha256(
+                    json.dumps(transaction).encode()
+                ).hexdigest()
+                continue
+            if transaction["contract_address"]:
+                func_bytes = self.find_contract(transaction["contract_address"])
+                smart_contract = SmartContract.decode(func_bytes)
+                # Execute it
+                smart_contract(transaction["data"])
+
+        # This is the last step, where everything is encoded and add it to the blockchain
         last_hash = self.get_last_bloc.compute_hash()
         index = self.get_last_bloc.index + 1
 
@@ -103,9 +139,6 @@ class BlockChain:
         self.chain.append(new_block)
         self.unconfirmed_transactions = []
         return f"Block #{new_block.index} has been mined!"
-
-    def add_new_transaction(self, transactions: list[list | dict]):
-        self.unconfirmed_transactions.append(transactions)
 
     @property
     def get_last_bloc(self) -> Block:
@@ -163,3 +196,20 @@ class BlockChain:
         if not block_hash.startswith("0" * self.difficulty):
             raise ValueError("Block hash is not consistent with chain difficulty")
         self.chain.append(new_block)
+
+    def find_contract(self, contract_address: str) -> str | None:
+        """
+        This function given a contract address searches across all the blockchain and finds the contract's bytecode
+        associated of the contract address found
+        :param contract_address:
+        :return:
+        """
+        for block in self.chain:
+            if block.transactions:
+                for transaction in block.transactions:
+                    if (
+                        transaction["is_contract"]
+                        and transaction["contract_address"] == contract_address
+                    ):
+                        return transaction["data"][0]
+        return None
