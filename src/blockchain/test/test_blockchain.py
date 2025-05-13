@@ -31,7 +31,7 @@ def test_create_passed_genesis_block():
 
 def test_mine_no_committed_transactions():
     global blockchain
-    with pytest.raises(NoTransactionsFound) as error:
+    with pytest.raises(NoTransactionsFound):
         blockchain.mine()
 
 
@@ -111,7 +111,7 @@ def test_mine_contract_not_found():
             }
         ]
     )
-    with pytest.raises(ContractNotFound) as error:
+    with pytest.raises(ContractNotFound):
         blockchain.mine()
     assert len(blockchain.chain) == 1
     # Cleanup
@@ -156,7 +156,7 @@ def test_check_is_chain_valid_bad_chain():
     assert len(blockchain.chain) > 1
     last_bloc = blockchain.chain[-1]
     last_bloc.transactions[0]["data"] = "Not the original data"
-    with pytest.raises(InvalidChain) as error:
+    with pytest.raises(InvalidChain):
         blockchain.is_chain_valid()
     # Cleanup
     del blockchain.chain[1:]
@@ -165,21 +165,21 @@ def test_check_is_chain_valid_bad_chain():
 def test_add_block_bad_index():
     global blockchain
     block = Block(index=100, timestamp="10.20.02", previous_hash="0", proof=100)
-    with pytest.raises(IndexError) as error:
+    with pytest.raises(IndexError):
         blockchain.add_block(block)
 
 
 def test_add_block_bad_previous_hash():
     global blockchain
     block = Block(index=1, timestamp="10.20.02", previous_hash="10000", proof=100)
-    with pytest.raises(InvalidChain) as error:
+    with pytest.raises(InvalidChain):
         blockchain.add_block(block)
 
 
 def test_add_block_inconsistent_hash():
     global blockchain
     block = Block(index=1, timestamp="10.20.02", previous_hash="0", proof=0)
-    with pytest.raises(InvalidChain) as error:
+    with pytest.raises(InvalidChain):
         blockchain.add_block(block)
 
 
