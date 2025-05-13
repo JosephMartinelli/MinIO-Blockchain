@@ -184,15 +184,13 @@ class BlockChain:
                 index=next_block.index,
             )
             block_hash = hashlib.sha256(digested_data).hexdigest()
-            if block_hash.startswith("0" * self.difficulty):
-                return True
-            else:
+            if not block_hash.startswith("0" * self.difficulty):
                 raise InvalidChain(
                     f"Block {next_block.__dict__} has been rejected due to an hash alteration, data has been tampered!"
                 )
         return True
 
-    def add_block(self, new_block: Block):
+    def add_block(self, new_block: Block) -> bool:
         last_block = self.get_last_bloc
         if new_block.index != (last_block.index + 1):
             raise IndexError(
@@ -212,6 +210,7 @@ class BlockChain:
         if not block_hash.startswith("0" * self.difficulty):
             raise InvalidChain("Block hash is not consistent with chain difficulty")
         self.chain.append(new_block)
+        return True
 
     def find_contract(self, contract_address: str) -> str | None:
         """
