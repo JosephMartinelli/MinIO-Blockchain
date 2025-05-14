@@ -2,14 +2,22 @@ import datetime
 
 import pytest
 
-from ..blockchain import BlockChain, Block
+from ..blockchain import BlockChain
+from ..block import Block
 from ..smart_contract import SmartContract
 from ..errors import ContractNotFound, NoTransactionsFound, InvalidChain
 from datetime import datetime
-from copy import deepcopy
 
 blockchain = BlockChain(difficulty=3)
-tr = [{"data": [], "is_contract": False, "contract_address": ""}]
+
+
+## Cleanup function
+@pytest.fixture(autouse=True)
+def cleanup():
+    global blockchain
+    yield
+    blockchain.unconfirmed_transactions = []
+    del blockchain.chain[1:]
 
 
 def test_genesis_block_creation():
@@ -36,22 +44,23 @@ def test_mine_no_committed_transactions():
 
 
 def test_mine_check_contract_address_creation():
-    global blockchain, tr
+    global blockchain
 
     def test_function(*args):
         pass
 
-    test_tr = deepcopy(tr)
-    test_tr[0]["data"] = SmartContract.encode(test_function)
     blockchain.add_new_transaction(
-        [{"data": test_tr, "is_contract": True, "contract_address": ""}]
+        [
+            {
+                "data": SmartContract.encode(test_function),
+                "is_contract": True,
+                "contract_address": "",
+            }
+        ]
     )
     assert blockchain.mine()
     assert len(blockchain.chain) > 1
     assert blockchain.chain[-1].transactions[0]["contract_address"]
-
-    # Cleanup
-    del blockchain.chain[1:]
 
 
 def test_smart_contract_exec():
@@ -61,18 +70,16 @@ def test_smart_contract_exec():
 
     encoded: str = SmartContract.encode(hello)
     blockchain.add_new_transaction(
-        [{"data": [encoded], "is_contract": True, "contract_address": ""}]
+        [{"data": encoded, "is_contract": True, "contract_address": ""}]
     )
     assert blockchain.mine()
     assert len(blockchain.chain) > 1
     address = blockchain.chain[-1].transactions[0]["contract_address"]
     blockchain.add_new_transaction(
-        [{"data": [], "is_contract": False, "contract_address": address}]
+        [{"data": "", "is_contract": False, "contract_address": address}]
     )
     assert blockchain.mine()
     assert len(blockchain.chain) > 2
-    # Cleanup
-    del blockchain.chain[1:]
 
 
 def test_smart_contract_exec_data_modified():
@@ -84,7 +91,7 @@ def test_smart_contract_exec_data_modified():
 
     encoded: str = SmartContract.encode(function_that_modifies_transaction_data)
     blockchain.add_new_transaction(
-        [{"data": [encoded], "is_contract": True, "contract_address": ""}]
+        [{"data": encoded, "is_contract": True, "contract_address": ""}]
     )
     assert blockchain.mine()
     assert len(blockchain.chain) > 1
@@ -95,9 +102,6 @@ def test_smart_contract_exec_data_modified():
     assert blockchain.mine()
     assert blockchain.chain[-1].transactions[0]["data"] == [2] * 5
     assert len(blockchain.chain) > 1
-
-    # Cleanup
-    del blockchain.chain[1:]
 
 
 def test_mine_contract_not_found():
@@ -114,8 +118,45 @@ def test_mine_contract_not_found():
     with pytest.raises(ContractNotFound):
         blockchain.mine()
     assert len(blockchain.chain) == 1
-    # Cleanup
-    del blockchain.chain[1:]
+
+
+def test_get_contract_from_multiple_contract_in_transaction():
+    global blockchain
+
+    def hello_1():
+        x = 1
+
+    def hello_2():
+        x = 2
+
+    def hello_3():
+        x = 3
+
+    def hello_4():
+        x = 4
+
+    encoded = [
+        SmartContract.encode(hello_1),
+        SmartContract.encode(hello_2),
+        SmartContract.encode(hello_3),
+        SmartContract.encode(hello_4),
+    ]
+    for data in encoded:
+        blockchain.add_new_transaction(
+            [
+                {
+                    "data": data,
+                    "is_contract": True,
+                    "contract_address": "",
+                }
+            ]
+        )
+    assert blockchain.mine()
+    print(blockchain.chain[1].transactions)
+    assert len(blockchain.chain) > 1
+    third_address = blockchain.chain[1].transactions[2]["contract_address"]
+    assert third_address
+    assert blockchain.find_contract(third_address) == encoded[2]
 
 
 def test_check_is_chain_valid_good_chain():
@@ -133,8 +174,6 @@ def test_check_is_chain_valid_good_chain():
         )
         blockchain.mine()
     assert blockchain.is_chain_valid()
-    # Cleanup
-    del blockchain.chain[1:]
 
 
 def test_check_is_chain_valid_bad_chain():
@@ -158,8 +197,6 @@ def test_check_is_chain_valid_bad_chain():
     last_bloc.transactions[0]["data"] = "Not the original data"
     with pytest.raises(InvalidChain):
         blockchain.is_chain_valid()
-    # Cleanup
-    del blockchain.chain[1:]
 
 
 def test_add_block_bad_index():
@@ -192,5 +229,3 @@ def test_add_block_all_good():
     )
     blockchain.proof_of_work(block)
     assert blockchain.add_block(block)
-    # Cleanup
-    del blockchain.chain[1:]

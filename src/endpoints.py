@@ -6,7 +6,8 @@ from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from blockchain.blockchain import BlockChain, Block
+from blockchain.blockchain import BlockChain
+from blockchain.block import Block
 from validation import (
     UnconfirmedTransaction,
     RegisterNode,

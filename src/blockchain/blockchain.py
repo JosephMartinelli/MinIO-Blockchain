@@ -8,46 +8,14 @@ from datetime import datetime
 import json
 import hashlib
 
-
+from .block import Block
+from .transaction import Transaction
 from .smart_contract import SmartContract
 from .errors import (
     NoTransactionsFound,
     ContractNotFound,
-    InvalidTransactions,
     InvalidChain,
 )
-
-
-class Block:
-    def __init__(
-        self,
-        index: int,
-        timestamp: datetime | str,
-        previous_hash: str,
-        proof: int = 0,
-        transactions: list[dict] = None,
-    ):
-        self.index = index
-        self.transactions = transactions
-        if isinstance(timestamp, datetime):
-            self.timestamp = timestamp.strftime("%d/%m/%y %H:%M:%S.%f")
-        else:
-            self.timestamp = timestamp
-        self.previous_hash = previous_hash
-        self.proof = proof
-
-    def compute_hash(self):
-        return hashlib.sha256(
-            json.dumps(self.__dict__, sort_keys=True).encode()
-        ).hexdigest()
-
-    def __str__(self):
-        return str(self.__dict__)
-
-    def __eq__(self, other) -> bool:
-        if isinstance(other, Block):
-            return other.__dict__ == self.__dict__
-        return False
 
 
 class BlockChain:
@@ -58,7 +26,7 @@ class BlockChain:
         else:
             self.create_genesis_block()
         self.difficulty = difficulty  # This is the difficulty of the PoW algorithm into the calculating the nonce
-        self.unconfirmed_transactions: list[dict] = (
+        self.unconfirmed_transactions: list[Transaction] = (
             []
         )  # Pool of transaction that need to be validated (or mined)
 
@@ -98,11 +66,15 @@ class BlockChain:
                 break
             block_to_calculate_proof.proof += 1
 
-    def are_transactions_valid(self):
-        return True
-
-    def add_new_transaction(self, data: list[dict]):
-        self.unconfirmed_transactions += data
+    def add_new_transaction(self, data: list[dict[str, ...]]):
+        """
+        This function checks if the transactions are in the format {'data':...,'is_contract':...,'contract_address':...
+        } and if so it adds them to the pool of unconfirmed transactions}
+        :param data:
+        :return:
+        """
+        print([Transaction(**x) for x in data])
+        self.unconfirmed_transactions += [Transaction(**x) for x in data]
 
     def mine(self):
         """
@@ -115,31 +87,25 @@ class BlockChain:
         if not self.unconfirmed_transactions:
             raise NoTransactionsFound("No unconfirmed transactions have been found!")
 
-        # Checking if the transactions are valid
-        if not self.are_transactions_valid():
-            raise InvalidTransactions(
-                "Transactions with the passed structure are not allowed!"
-            )
-
         # We check each transaction for:
         # 1. If it is a contract, then we calculate the contract address by hashing the bytecode
         # 2. Checking if the transaction refers a contract, if it is then the contract is fetched, decoded and executed
         # 3. If it refers no contract, then we do nothing
         for transaction in self.unconfirmed_transactions:
-            if transaction["is_contract"] and not transaction["contract_address"]:
-                transaction["contract_address"] = hashlib.sha256(
-                    json.dumps(transaction).encode()
+            if transaction.is_contract and not transaction.contract_address:
+                transaction.contract_address = hashlib.sha256(
+                    transaction.data.encode()
                 ).hexdigest()
                 continue
-            if transaction["contract_address"]:
-                func_bytes = self.find_contract(transaction["contract_address"])
+            if transaction.contract_address:
+                func_bytes = self.find_contract(transaction.contract_address)
                 if func_bytes is None:
                     raise ContractNotFound(
                         "No contract has been found with that address!"
                     )
                 smart_contract = SmartContract.decode(func_bytes)
                 # Execute it
-                smart_contract(transaction["data"])
+                smart_contract(transaction.data)
 
         # This is the last step, where everything is encoded and add it to the blockchain
         last_hash = self.get_last_bloc.compute_hash()
@@ -227,5 +193,5 @@ class BlockChain:
                         and transaction["contract_address"] == contract_address
                     ):
                         # Return the function bytecode
-                        return transaction["data"][0]
+                        return transaction["data"]
         return None
