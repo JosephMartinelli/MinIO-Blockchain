@@ -7,6 +7,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from blockchain.blockchain import BlockChain
+from blockchain.errors import NoTransactionsFound
 from blockchain.block import Block
 from validation import (
     UnconfirmedTransaction,
@@ -15,7 +16,7 @@ from validation import (
 )
 
 router = APIRouter()
-difficulty: int = os.environ.get("difficulty", 7)
+difficulty: int = os.environ.get("difficulty", 3)
 blockchain: BlockChain = BlockChain(difficulty=difficulty)
 peers = set()
 port = os.environ.get("port", 8000)
@@ -29,11 +30,11 @@ async def get_chain() -> list:
 @router.post("/register-transactions", status_code=200)
 async def add_new_transactions(transactions: UnconfirmedTransaction):
     transactions = transactions.model_dump()
-    blockchain.add_new_transaction(transactions)
+    blockchain.add_new_transaction(transactions["transactions"])
     return JSONResponse(status_code=200, content="Transactions added successfully")
 
 
-@router.post("/register-node", status_code=201)
+@router.get("/register-node", status_code=200)
 async def register_node(request: Request):
     """
     This function adds a new peer to the current node by inserting it into the set of his peers
@@ -88,7 +89,7 @@ async def register_with_node(node_to_register: RegisterNode):
     # Then I add to my peers the node that I am registering to
     peers.add(f"{node_info['node_address']}:{node_info['node_port']}")
     # Updating local view of the blockchain
-    blockchain = create_blockchain_from_request(data["chain"])
+    create_blockchain_from_request(data["chain"])
     return JSONResponse(
         status_code=200,
         content=f"Successfully registered to node {node_info['node_address']}, and now I can see the following"
@@ -113,18 +114,8 @@ async def add_block(in_block: InputBlock):
             status_code=400,
             content="Last block invalidated the chain, reverting back...",
         )
-
-
-def create_blockchain_from_request(data: list[dict]) -> BlockChain:
-    if len(data) == 1:
-        blockchain = BlockChain(difficulty, genesis_block=Block(**data[0]))
     else:
-        blockchain = BlockChain(difficulty)
-        for block in data[1:]:
-            blockchain.chain.append(Block(**block))
-    if not blockchain.is_chain_valid():
-        raise RuntimeError("Blockchain has been tampered!")
-    return blockchain
+        return JSONResponse(status_code=201, content="Block added successfully")
 
 
 @router.get("/consensus", status_code=200)
@@ -135,7 +126,9 @@ async def consensus():
     one.
     :return:
     """
-    max_chain = []
+    global blockchain
+    max_chain = blockchain.chain
+    replaced = False
     # First, find the longest oldest chain
     for indx, peer in enumerate(peers):
         # Get peer chain
@@ -145,32 +138,29 @@ async def consensus():
         peer_chain = response.json()
         if len(peer_chain) > len(max_chain):
             max_chain = peer_chain
+            replaced = True
 
-    # Found the maximum chain we get that chain
-    create_blockchain_from_request(max_chain.json())
+    # Found the longest chain, we get it and we validate it
+    if replaced:
+        create_blockchain_from_request(max_chain)
 
-    for peer in peers:
-        response = requests.get(url=f"http://{peer}/consensus")
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"An error occurred during consensus, the following peer caused the error"
-                f" {response.status_code} {response.content}"
-            )
+    return {"replaced": replaced}
 
 
 @router.get("/mine", status_code=200)
-async def mine() -> str:
-    result = blockchain.mine()
-    if isinstance(result, bool) and not result:
-        return "No uncommitted transactions are present!"
-    else:
-        # If we have the longest valid chain, than we need to announce the new block we have mined so that the
-        # others node can add it
-        current_chain_length: int = len(blockchain.chain)
-        await consensus()
-        if current_chain_length == len(blockchain.chain):
-            await announce_new_block()
-        return result
+async def mine():
+    try:
+        result = blockchain.mine()
+    except NoTransactionsFound:
+        return JSONResponse(
+            status_code=400, content="No transactions have been found on this node!"
+        )
+    # When a block has been mined, all the nodes by using consensus need to reach
+    # a common view of the blockchain
+    response = await consensus()
+    if not response["replaced"]:
+        await announce_new_block()
+    return result
 
 
 async def announce_new_block():
@@ -188,3 +178,17 @@ async def announce_new_block():
             raise RuntimeError(
                 f"Error in announcing the new block to the other peers\n {response.content}"
             )
+
+
+def create_blockchain_from_request(data: list[dict]):
+    global blockchain
+    if len(data) == 1:
+        data_blockchain = BlockChain(difficulty, genesis_block=Block(**data[0]))
+    else:
+        data_blockchain = BlockChain(difficulty)
+        for block in data[1:]:
+            data_blockchain.chain.append(Block(**block))
+    if data_blockchain.is_chain_valid():
+        blockchain = data_blockchain
+    else:
+        raise RuntimeError("Blockchain has been tampered!")

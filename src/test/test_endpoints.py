@@ -6,7 +6,7 @@ from copy import deepcopy
 port = os.environ.get("port", 8000)
 server = "http://" + os.environ.get("server", "localhost")
 
-test_transaction = {"transactions": [], "is_contract": "", "contract_address": ""}
+test_transaction = {"data": [], "is_contract": "", "contract_address": ""}
 
 
 def test_get_chain():
@@ -18,7 +18,7 @@ def test_get_chain():
 
 def test_register_transactions_bad_tr_field():
     transactions = deepcopy(test_transaction)
-    transactions["transactions"] = "bed_elem"
+    transactions["data"] = 0.321
     response = requests.post(
         url=f"{server}:{port}/register-transactions", data=transactions
     )
@@ -45,14 +45,29 @@ def test_register_transactions_bad_contract_address_field():
 
 def test_register_transaction_all_good():
     transactions = deepcopy(test_transaction)
-    transactions["transactions"] = [["Hello, this is test data!"]]
+    transactions["data"] = ["Hello, this is test data!"]
+    payload = {"transactions": [transactions]}
     del transactions["is_contract"]
     del transactions["contract_address"]
     response = requests.post(
-        url=f"{server}:{port}/register-transactions", data=json.dumps(transactions)
+        url=f"{server}:{port}/register-transactions", data=json.dumps(payload)
     )
     assert response.status_code == 200, print(response.status_code, response.content)
 
 
-def test_mine_transaction():
+def test_register_node():
+    response = requests.get(url=f"{server}:{port}/register-node")
+    assert response.status_code == 200, print(response.status_code, response.content)
+    data = response.json()
+    assert data["chain"]
+    assert len(data["chain"]) > 0
+
+
+def test_mine_no_transactions():
+    response = requests.get(url=f"{server}:{port}/mine")
+    assert response.status_code == 400
+
+
+# TODO: Implement this
+def test_mine_all_good():
     pass
