@@ -26,9 +26,9 @@ class BlockChain:
         else:
             self.create_genesis_block()
         self.difficulty = difficulty  # This is the difficulty of the PoW algorithm into the calculating the nonce
-        self.unconfirmed_transactions: list[
-            Transaction
-        ] = []  # Pool of transaction that need to be validated (or mined)
+        self.unconfirmed_transactions: list[Transaction] = (
+            []
+        )  # Pool of transaction that need to be validated (or mined)
 
     def create_genesis_block(self):
         genesis_block = Block(0, datetime.now(), "0")
