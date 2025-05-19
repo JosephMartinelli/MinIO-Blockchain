@@ -61,4 +61,4 @@ jobs:
       - name: Run bandit
         run: |
           cd ./src/         
-          python -m bandit -c bandit.yaml b-r .
+          python -m bandit .
