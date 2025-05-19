@@ -54,11 +54,11 @@ jobs:
 
       - name: Run Ruff
         run: |
-          cd .src/
+          cd ./src/
           python -m ruff check .
           python -m ruff format --check .
 
       - name: Run bandit
         run: |
-          cd .src/         
+          cd ./src/         
           python -m bandit -c bandit.yaml b-r .
