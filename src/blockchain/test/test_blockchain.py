@@ -1,12 +1,9 @@
-import datetime
-
 import pytest
 
 from ..blockchain import BlockChain
 from ..block import Block
 from ..smart_contract import SmartContract
 from ..errors import ContractNotFound, NoTransactionsFound, InvalidChain
-from datetime import datetime
 
 blockchain = BlockChain(difficulty=3)
 
@@ -27,7 +24,7 @@ def test_genesis_block_creation():
 def test_create_passed_genesis_block():
     genesis = Block(
         index=50,
-        timestamp=datetime.now(),
+        timestamp="10",
         previous_hash="100",
         proof=100,
         transactions=[],
@@ -124,16 +121,16 @@ def test_get_contract_from_multiple_contract_in_transaction():
     global blockchain
 
     def hello_1():
-        x = 1
+        pass
 
     def hello_2():
-        x = 2
+        pass
 
     def hello_3():
-        x = 3
+        pass
 
     def hello_4():
-        x = 4
+        pass
 
     encoded = [
         SmartContract.encode(hello_1),
