@@ -31,7 +31,7 @@ jobs:
 
       - name: Run the Docker container
         run: |
-          docker run -d --network ${{ job.services.postgres.network }} \
+          docker run  \
             -p 8000:8000 \
             --name test-container test-container
 
