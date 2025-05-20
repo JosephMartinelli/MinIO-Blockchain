@@ -16,6 +16,11 @@ def test_get_chain():
     assert len(data) != 0, print(data)
 
 
+def test_mine_no_transactions():
+    response = requests.get(url=f"{server}:{port}/mine")
+    assert response.status_code == 400
+
+
 def test_register_transactions_bad_tr_field():
     transactions = deepcopy(test_transaction)
     transactions["data"] = 0.321
@@ -61,11 +66,6 @@ def test_register_node():
     data = response.json()
     assert data["chain"]
     assert len(data["chain"]) > 0
-
-
-def test_mine_no_transactions():
-    response = requests.get(url=f"{server}:{port}/mine")
-    assert response.status_code == 400
 
 
 # TODO: Implement this
