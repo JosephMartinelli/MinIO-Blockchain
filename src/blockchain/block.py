@@ -14,6 +14,8 @@ class Block:
         transactions: list[Transaction] = None,
     ):
         self.index = index
+        # Transactional data is validated against a Transaction Model defined in transaction.py
+        self.transactions = []
         if transactions:
             self.transactions = [
                 item.model_dump() for item in transactions

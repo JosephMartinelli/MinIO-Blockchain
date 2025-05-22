@@ -1,9 +1,13 @@
 import pytest
 
 from ..blockchain import BlockChain
+from ..transaction import Transaction
 from ..block import Block
 from ..smart_contract import SmartContract
 from ..errors import ContractNotFound, NoTransactionsFound, InvalidChain
+
+from copy import deepcopy
+
 
 blockchain = BlockChain(difficulty=3)
 
@@ -226,3 +230,86 @@ def test_add_block_all_good():
     )
     blockchain.proof_of_work(block)
     assert blockchain.add_block(block)
+
+
+def test_create_blockchain_from_request_no_transactions():
+    global blockchain
+    for i in range(1, 6):
+        block = Block(
+            index=i,
+            timestamp="0",
+            previous_hash=blockchain.get_last_bloc.compute_hash(),
+            proof=0,
+        )
+        blockchain.proof_of_work(block)
+        assert blockchain.add_block(block)
+    # Convert it to list of dict
+    blockchain_str = [x.__dict__ for x in blockchain.chain]
+    # Now we pass it to the function so that we can test it
+    blockchain.create_blockchain_from_request(blockchain_str)
+
+
+def test_create_blockchain_from_request_with_transactions():
+    global blockchain
+    for i in range(1, 6):
+        tr_list = []
+        for j in range(10):
+            tr_list.append(
+                Transaction(is_contract=False, contract_address="0", data=f"{i}{j}")
+            )
+        block = Block(
+            index=i,
+            timestamp="0",
+            previous_hash=blockchain.get_last_bloc.compute_hash(),
+            proof=0,
+            transactions=tr_list,
+        )
+        blockchain.proof_of_work(block)
+        assert blockchain.add_block(block)
+    # Convert it to list of dict
+    blockchain_str = [x.__dict__ for x in blockchain.chain]
+    # Now we pass it to the function so that we can test it
+    blockchain.create_blockchain_from_request(blockchain_str)
+
+
+def test_create_blockchain_from_request_has_chain_changed():
+    local_chain = BlockChain(difficulty=3)
+    for i in range(1, 6):
+        tr_list = []
+        for j in range(10):
+            tr_list.append(
+                Transaction(is_contract=False, contract_address="0", data=f"{i}{j}")
+            )
+        block = Block(
+            index=i,
+            timestamp="0",
+            previous_hash=local_chain.get_last_bloc.compute_hash(),
+            proof=0,
+            transactions=tr_list,
+        )
+        local_chain.proof_of_work(block)
+        assert local_chain.add_block(block)
+
+    global blockchain
+    for i in range(1, 6):
+        tr_list = []
+        for j in range(10):
+            tr_list.append(
+                Transaction(is_contract=False, contract_address="0", data=f"{i}{j}")
+            )
+        block = Block(
+            index=i,
+            timestamp="0",
+            previous_hash=blockchain.get_last_bloc.compute_hash(),
+            proof=0,
+            transactions=tr_list,
+        )
+        blockchain.proof_of_work(block)
+        assert blockchain.add_block(block)
+
+    # Convert it to list of dict
+    blockchain_str = deepcopy([x.__dict__ for x in blockchain.chain])
+    # Now we pass it to the function so that we can test it
+    local_chain.create_blockchain_from_request(blockchain_str)
+    for x, y in zip(local_chain.chain, blockchain.chain):
+        assert x == y

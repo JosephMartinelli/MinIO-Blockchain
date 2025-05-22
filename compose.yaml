@@ -12,4 +12,16 @@ services:
     environment:
       MINIO_CONFIG_ENV_FILE: "/etc/config.env"
     command: server /data --console-address ":9001"
+  AC-blockchain:
+    container_name: "AC-blockchain"
+    depends_on:
+      - minio
+    image: ghcr.io/josephmartinelli/minio-blockchain:master
+    ports:
+      - "8000:8000"
+    environment:
+      NODE_ROLE: ""
+      PORT: ""
+      CHAIN_DIFFICULTY: ""
+
 

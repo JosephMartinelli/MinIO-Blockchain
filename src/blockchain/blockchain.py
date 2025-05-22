@@ -7,7 +7,8 @@ https://www.bing.com/videos/riverview/relatedvideo?q=python+api+for+blockchain&m
 from datetime import datetime
 import json
 import hashlib
-
+from typing import List
+from pydantic import TypeAdapter
 from .block import Block
 from .transaction import Transaction
 from .smart_contract import SmartContract
@@ -73,7 +74,6 @@ class BlockChain:
         :param data:
         :return:
         """
-        print([Transaction(**x) for x in data])
         self.unconfirmed_transactions += [Transaction(**x) for x in data]
 
     def mine(self):
@@ -156,8 +156,10 @@ class BlockChain:
                 )
         return True
 
-    def add_block(self, new_block: Block) -> bool:
-        last_block = self.get_last_bloc
+    @staticmethod
+    def is_block_valid(
+        last_block: Block, new_block: Block, chain_difficulty: int
+    ) -> bool:
         if new_block.index != (last_block.index + 1):
             raise IndexError(
                 f"Current index is {last_block.index}, but the index passed is {new_block.index}"
@@ -166,17 +168,24 @@ class BlockChain:
             raise InvalidChain(
                 "The passed hash is not consistent with the hash of the last block"
             )
-        digested_data = self.digest_proof_and_transactions(
+        digested_data = BlockChain.digest_proof_and_transactions(
             next_proof=new_block.proof,
             previous_proof=last_block.proof,
             transactions=new_block.transactions,
             index=new_block.index,
         )
         block_hash = hashlib.sha256(digested_data).hexdigest()
-        if not block_hash.startswith("0" * self.difficulty):
+        if not block_hash.startswith("0" * chain_difficulty):
             raise InvalidChain("Block hash is not consistent with chain difficulty")
-        self.chain.append(new_block)
         return True
+
+    def add_block(self, new_block: Block) -> bool:
+        last_block = self.get_last_bloc
+        if BlockChain.is_block_valid(last_block, new_block, self.difficulty):
+            self.chain.append(new_block)
+            return True
+        else:
+            return False
 
     def find_contract(self, contract_address: str) -> str | None:
         """
@@ -195,3 +204,31 @@ class BlockChain:
                         # Return the function bytecode
                         return transaction["data"]
         return None
+
+    def create_blockchain_from_request(self, data: list[dict]) -> bool:
+        """
+        This function creates a new blockchain given a list of blocks. As each block is inserted, both the transactional
+        data it holds and the block itself are validated.
+        :param data:
+        :return:
+        """
+        tr_val = TypeAdapter(List[Transaction])
+        new_chain = []
+        for index, str_block in enumerate(data):
+            str_block["transactions"] = tr_val.validate_python(
+                str_block["transactions"]
+            )
+            validated_block = Block(**str_block)
+            # In case this is the genesis block
+            if index == 0:
+                new_chain.append(validated_block)
+                continue
+            # Then we check if it is a valid block
+            last_block: Block = new_chain[-1]
+            if BlockChain.is_block_valid(last_block, validated_block, self.difficulty):
+                new_chain.append(validated_block)
+            else:
+                return False
+        # Lastly we swap the current chain with this new chain
+        self.chain = new_chain
+        return True
