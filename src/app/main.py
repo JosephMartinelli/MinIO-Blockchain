@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.nodes import light_node, full_node
-from .config import settings, NodeRole
+from app.config import settings, NodeRole
 
 
 app = FastAPI()
