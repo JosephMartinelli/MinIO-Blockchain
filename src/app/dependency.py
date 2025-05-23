@@ -4,7 +4,7 @@ This file contains global dependencies that are shared across all endpoints and 
 """
 
 from blockchain.blockchain import BlockChain
-from config import settings
+from .config import settings
 
 blockchain = BlockChain(difficulty=settings.chain_difficulty)
 peers = set()

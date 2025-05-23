@@ -7,4 +7,4 @@ COPY . .
 RUN uv init
 RUN uv add -r ./requirements.txt
 
-CMD [".venv/bin/fastapi", "run", "main.py", "--port", "8000"]
+CMD [".venv/bin/fastapi", "run", "app/main.py", "--port", "8000"]
