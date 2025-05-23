@@ -31,7 +31,7 @@ jobs:
 
       - name: Run the Docker container
         run: |
-          docker run -d -p 8000:8000 --name test-container test-container\
+          docker run -d -p 8000:8000 --name test-container test-container \
           -e NODE_ROLE='publisher'
 
       - name: Wait the container to be up and running
