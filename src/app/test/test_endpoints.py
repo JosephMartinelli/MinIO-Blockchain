@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from copy import deepcopy
-from blockchain.blockchain import BlockChain, Block
+from ...blockchain.blockchain import BlockChain, Block
 
 port = os.environ.get("port", 8000)
 server = "http://" + os.environ.get("server", "localhost")

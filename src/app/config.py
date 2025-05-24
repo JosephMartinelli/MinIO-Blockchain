@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     node_role: str
     port: int = Field(ge=8000, lt=9000)
     chain_difficulty: int = Field(lt=10)
+    peers: list[str] | str = None
 
     @field_validator("node_role")
     def check_role_is_valid(cls, v):
@@ -25,9 +26,14 @@ class Settings(BaseSettings):
             return v
         raise ValueError(f"This role is not valid! Allowed roles are: {roles}")
 
+    @field_validator("peers", mode="after")
+    def make_peer_list(cls, v):
+        return v.replace('"', "").split(sep=",")
+
 
 settings = Settings(
     node_role=os.environ.get("NODE_ROLE", "light"),
     port=os.environ.get("PORT", 8000),
     chain_difficulty=os.environ.get("CHAIN_DIFFICULTY", 5),
+    peers=os.environ.get("PEERS", None),
 )

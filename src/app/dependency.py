@@ -7,7 +7,11 @@ from blockchain.blockchain import BlockChain
 from .config import settings
 
 blockchain = BlockChain(difficulty=settings.chain_difficulty)
-peers = set()
+
+if not settings.peers:
+    peers = set(settings.peers)
+else:
+    peers = set()
 
 
 def get_peers():
