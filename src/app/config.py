@@ -30,7 +30,8 @@ class Settings(BaseSettings):
     def make_peer_list(cls, v):
         if v:
             return v.replace('"', "").split(sep=",")
-        else: return None
+        else:
+            return ""
 
 
 settings = Settings(
