@@ -28,7 +28,9 @@ class Settings(BaseSettings):
 
     @field_validator("peers", mode="after")
     def make_peer_list(cls, v):
-        return v.replace('"', "").split(sep=",")
+        if v:
+            return v.replace('"', "").split(sep=",")
+        else: return None
 
 
 settings = Settings(

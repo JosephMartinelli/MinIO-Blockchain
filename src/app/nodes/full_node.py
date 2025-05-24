@@ -16,7 +16,6 @@ from validation import (
 )
 
 from ..dependency import get_peers, get_blockchain, create_blockchain
-from ..config import settings
 
 from anyio import move_on_after
 
