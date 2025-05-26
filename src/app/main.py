@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.nodes import light_node, full_node
 from app.config import settings, NodeRole
 from contextlib import asynccontextmanager
+from app.startup import populate_local_blockchain
 
 
 @asynccontextmanager
@@ -11,8 +12,9 @@ async def lifespan(app: FastAPI):
     BEFORE the application is launched while the code after the yield is run AFTER the app execution. The code
     is run only once.
     """
+    # We fetch from other admin
     if settings.node_role == NodeRole.PUBLISHER:
-        pass
+        populate_local_blockchain()
     yield
 
 

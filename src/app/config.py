@@ -31,12 +31,12 @@ class Settings(BaseSettings):
         if v:
             return v.replace('"', "").split(sep=",")
         else:
-            return ""
+            return v
 
 
 settings = Settings(
     node_role=os.environ.get("NODE_ROLE", "light"),
     port=os.environ.get("PORT", 8000),
     chain_difficulty=os.environ.get("CHAIN_DIFFICULTY", 5),
-    peers=os.environ.get("PEERS", None),
+    peers=os.environ.get("PEERS", ""),
 )
