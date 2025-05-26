@@ -19,9 +19,6 @@ services:
     image: ghcr.io/josephmartinelli/minio-blockchain:master
     ports:
       - "8000:8000"
-    environment:
-      NODE_ROLE: ""
-      PORT: ""
-      CHAIN_DIFFICULTY: ""
+
 
 
