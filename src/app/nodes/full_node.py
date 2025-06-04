@@ -19,7 +19,7 @@ from ..dependency import get_peers, get_blockchain, create_blockchain
 
 from anyio import move_on_after
 
-router = APIRouter(dependencies=[Depends(get_peers)])
+router = APIRouter(dependencies=[Depends(get_peers), Depends(get_blockchain)])
 
 peers_dependency = Annotated[set, Depends(get_peers)]
 blockchain_dependency = Annotated[BlockChain, Depends(get_blockchain)]

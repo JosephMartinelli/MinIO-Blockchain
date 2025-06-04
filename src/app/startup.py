@@ -5,7 +5,8 @@ a series of smart contracts that the blockchain will use to determine if an user
 
 
 # Here is a list of function that will be embedded in the blockchain
-def grant_access(user_data: str, permissions: str) -> bool:
+def generate_nonce_and_log(user_auth: str, permissions: str) -> bool:
+
     pass
 
 

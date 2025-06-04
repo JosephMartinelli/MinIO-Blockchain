@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+import datetime
+
+from pydantic import BaseModel, ConfigDict, condate
 
 
 class Transaction(BaseModel):
@@ -29,3 +31,20 @@ class InputBlock(BaseModel):
     timestamp: str
     previous_hash: str
     proof: int
+
+
+class ChallengeRequest(BaseModel):
+    public_key: str
+    client_id: str
+    client_name: str
+
+
+class ChallengeResponse(BaseModel):
+    nonce: str
+    domain: str
+    expire: condate(ge=datetime.datetime.now())
+
+
+class AccessRequest(BaseModel):
+    action: list[str]
+    resource: str

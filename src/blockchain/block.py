@@ -1,27 +1,18 @@
+from datetime import datetime
+from abc import ABC
 import hashlib
 import json
-from datetime import datetime
-from .transaction import Transaction
 
 
-class Block:
+class Block(ABC):
     def __init__(
         self,
         index: int,
         timestamp: datetime | str,
         previous_hash: str,
         proof: int = 0,
-        transactions: list[Transaction] = None,
     ):
         self.index = index
-        # Transactional data is validated against a Transaction Model defined in transaction.py
-        self.transactions = []
-        if transactions:
-            self.transactions = [
-                item.model_dump() for item in transactions
-            ]  # This is done so that we have validated dicts
-        else:
-            self.transactions: list[dict] = []
         if isinstance(timestamp, datetime):
             self.timestamp = timestamp.strftime("%d/%m/%y %H:%M:%S.%f")
         else:
@@ -36,8 +27,3 @@ class Block:
 
     def __str__(self):
         return str(self.__dict__)
-
-    def __eq__(self, other) -> bool:
-        if isinstance(other, Block):
-            return other.__dict__ == self.__dict__
-        return False

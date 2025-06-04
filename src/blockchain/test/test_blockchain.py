@@ -1,15 +1,15 @@
 import pytest
 
-from ..blockchain import BlockChain
-from ..transaction import Transaction
-from ..block import Block
+from ..simple_blockchain import SimpleBlockchain
+from ..transaction import SimpleTransaction
+from ..simple_block import SimpleBlock
 from ..smart_contract import SmartContract
 from ..errors import ContractNotFound, NoTransactionsFound, InvalidChain
 
 from copy import deepcopy
 
 
-blockchain = BlockChain(difficulty=3)
+blockchain = SimpleBlockchain(difficulty=3)
 
 
 ## Cleanup function
@@ -26,14 +26,14 @@ def test_genesis_block_creation():
 
 
 def test_create_passed_genesis_block():
-    genesis = Block(
+    genesis = SimpleBlock(
         index=50,
         timestamp="10",
         previous_hash="100",
         proof=100,
         transactions=[],
     )
-    local_chain = BlockChain(difficulty=3, genesis_block=genesis)
+    local_chain = SimpleBlockchain(difficulty=3, genesis_block=genesis)
     assert len(local_chain.chain) == 1
     assert local_chain.chain[-1] == genesis
 
@@ -202,21 +202,21 @@ def test_check_is_chain_valid_bad_chain():
 
 def test_add_block_bad_index():
     global blockchain
-    block = Block(index=100, timestamp="10.20.02", previous_hash="0", proof=100)
+    block = SimpleBlock(index=100, timestamp="10.20.02", previous_hash="0", proof=100)
     with pytest.raises(IndexError):
         blockchain.add_block(block)
 
 
 def test_add_block_bad_previous_hash():
     global blockchain
-    block = Block(index=1, timestamp="10.20.02", previous_hash="10000", proof=100)
+    block = SimpleBlock(index=1, timestamp="10.20.02", previous_hash="10000", proof=100)
     with pytest.raises(InvalidChain):
         blockchain.add_block(block)
 
 
 def test_add_block_inconsistent_hash():
     global blockchain
-    block = Block(index=1, timestamp="10.20.02", previous_hash="0", proof=0)
+    block = SimpleBlock(index=1, timestamp="10.20.02", previous_hash="0", proof=0)
     with pytest.raises(InvalidChain):
         blockchain.add_block(block)
 
@@ -225,7 +225,7 @@ def test_add_block_all_good():
     global blockchain
     # Get last block hash (which is the genesis block)
     genesis = blockchain.get_last_bloc
-    block = Block(
+    block = SimpleBlock(
         index=1, timestamp="10.20.02", previous_hash=genesis.compute_hash(), proof=0
     )
     blockchain.proof_of_work(block)
@@ -235,7 +235,7 @@ def test_add_block_all_good():
 def test_create_blockchain_from_request_no_transactions():
     global blockchain
     for i in range(1, 6):
-        block = Block(
+        block = SimpleBlock(
             index=i,
             timestamp="0",
             previous_hash=blockchain.get_last_bloc.compute_hash(),
@@ -255,9 +255,11 @@ def test_create_blockchain_from_request_with_transactions():
         tr_list = []
         for j in range(10):
             tr_list.append(
-                Transaction(is_contract=False, contract_address="0", data=f"{i}{j}")
+                SimpleTransaction(
+                    is_contract=False, contract_address="0", data=f"{i}{j}"
+                )
             )
-        block = Block(
+        block = SimpleBlock(
             index=i,
             timestamp="0",
             previous_hash=blockchain.get_last_bloc.compute_hash(),
@@ -273,14 +275,16 @@ def test_create_blockchain_from_request_with_transactions():
 
 
 def test_create_blockchain_from_request_has_chain_changed():
-    local_chain = BlockChain(difficulty=3)
+    local_chain = SimpleBlockchain(difficulty=3)
     for i in range(1, 6):
         tr_list = []
         for j in range(10):
             tr_list.append(
-                Transaction(is_contract=False, contract_address="0", data=f"{i}{j}")
+                SimpleTransaction(
+                    is_contract=False, contract_address="0", data=f"{i}{j}"
+                )
             )
-        block = Block(
+        block = SimpleBlock(
             index=i,
             timestamp="0",
             previous_hash=local_chain.get_last_bloc.compute_hash(),
@@ -295,9 +299,11 @@ def test_create_blockchain_from_request_has_chain_changed():
         tr_list = []
         for j in range(10):
             tr_list.append(
-                Transaction(is_contract=False, contract_address="0", data=f"{i}{j}")
+                SimpleTransaction(
+                    is_contract=False, contract_address="0", data=f"{i}{j}"
+                )
             )
-        block = Block(
+        block = SimpleBlock(
             index=i,
             timestamp="0",
             previous_hash=blockchain.get_last_bloc.compute_hash(),
@@ -310,6 +316,6 @@ def test_create_blockchain_from_request_has_chain_changed():
     # Convert it to list of dict
     blockchain_str = deepcopy([x.__dict__ for x in blockchain.chain])
     # Now we pass it to the function so that we can test it
-    local_chain.create_blockchain_from_request(blockchain_str)
+    assert local_chain.create_blockchain_from_request(blockchain_str)
     for x, y in zip(local_chain.chain, blockchain.chain):
         assert x == y

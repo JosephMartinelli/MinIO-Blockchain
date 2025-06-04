@@ -3,10 +3,10 @@ This file contains global dependencies that are shared across all endpoints and 
  injected with FastAPI injection system.
 """
 
-from blockchain.blockchain import BlockChain
+from blockchain.ac_blockchain import ACBlockchain
 from .config import settings
 
-blockchain = BlockChain(difficulty=settings.chain_difficulty)
+blockchain = ACBlockchain(difficulty=settings.chain_difficulty)
 
 if not settings.peers:
     peers = set(settings.peers)
@@ -18,9 +18,9 @@ def get_peers():
     return peers
 
 
-def get_blockchain():
+def get_blockchain() -> ACBlockchain:
     return blockchain
 
 
 def create_blockchain():
-    return BlockChain(difficulty=settings.chain_difficulty)
+    return ACBlockchain(difficulty=settings.chain_difficulty)
