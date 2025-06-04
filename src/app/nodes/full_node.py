@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from blockchain.blockchain import BlockChain
+from blockchain.ac_blockchain import ACBlockchain
 from blockchain.errors import NoTransactionsFound, InvalidChain
-from blockchain.block import Block
+from blockchain.ac_block import ACBlock
 from validation import (
     UnconfirmedTransaction,
     InputBlock,
@@ -22,8 +22,8 @@ from anyio import move_on_after
 router = APIRouter(dependencies=[Depends(get_peers), Depends(get_blockchain)])
 
 peers_dependency = Annotated[set, Depends(get_peers)]
-blockchain_dependency = Annotated[BlockChain, Depends(get_blockchain)]
-create_blockchain_dependency = Annotated[BlockChain, Depends(create_blockchain)]
+blockchain_dependency = Annotated[ACBlockchain, Depends(get_blockchain)]
+create_blockchain_dependency = Annotated[ACBlockchain, Depends(create_blockchain)]
 
 
 @router.get(path="/")
@@ -45,7 +45,7 @@ async def add_new_transactions(
 
 @router.post(path="/add-block", status_code=201)
 async def add_block(in_block: InputBlock, blockchain: blockchain_dependency):
-    block = Block(**in_block.model_dump())
+    block = ACBlock(**in_block.model_dump())
     try:
         result = blockchain.add_block(block)
     except (IndexError, InvalidChain) as e:
@@ -112,7 +112,7 @@ async def mine(blockchain: blockchain_dependency, peers: peers_dependency):
     return result
 
 
-async def announce_new_block(blockchain: BlockChain, peers: set):
+async def announce_new_block(blockchain: ACBlockchain, peers: set):
     """
     This function announces the new mined block to all the peers
     :return:
