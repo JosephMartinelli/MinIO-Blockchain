@@ -1,4 +1,3 @@
-
 import pytest
 
 from ..ac_blockchain import ACBlockchain
