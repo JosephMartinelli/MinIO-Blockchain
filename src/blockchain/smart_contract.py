@@ -11,7 +11,7 @@ class SmartContract:
         self.decoded_function = None
 
     @staticmethod
-    def encode(func) -> str:
+    def encode(func: Callable[[...], bool]) -> str:
         func_code = getattr(func, "__code__", None)
         new_code = func_code.replace(co_filename="generated")
         encoded_func = marshal.dumps(new_code)

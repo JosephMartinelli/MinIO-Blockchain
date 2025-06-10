@@ -10,12 +10,13 @@ from abc import ABC, abstractmethod
 
 class BlockChain(ABC):
     def __init__(self, difficulty: int, genesis_block: Block = None):
-        self.chain: list[Block] = []
+        self.chain: list = []
+        self.difficulty = difficulty  # This is the difficulty of the PoW algorithm into the calculating the nonce
         if genesis_block:
+            self.proof_of_work(genesis_block)
             self.chain.append(genesis_block)
         else:
             self.create_genesis_block()
-        self.difficulty = difficulty  # This is the difficulty of the PoW algorithm into the calculating the nonce
 
     @abstractmethod
     def create_genesis_block(self):
@@ -61,7 +62,8 @@ class BlockChain(ABC):
         pass
 
     @property
-    def get_last_bloc(self) -> Block:
+    @abstractmethod
+    def get_last_bloc(self):
         return self.chain[-1]
 
     @abstractmethod

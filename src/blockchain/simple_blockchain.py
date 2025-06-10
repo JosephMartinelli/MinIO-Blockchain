@@ -21,13 +21,21 @@ from .errors import (
 
 
 class SimpleBlockchain(BlockChain):
-    def __init__(self, difficulty: int, genesis_block: SimpleBlock = None):
+    def __init__(
+        self,
+        difficulty: int,
+        genesis_block: SimpleBlock = None,
+        transactions: list[SimpleTransaction] = None,
+    ):
         super().__init__(difficulty, genesis_block)
-        self.unconfirmed_transactions: list[SimpleTransaction] = []
+        if transactions:
+            self.unconfirmed_transactions = [tr.model_dump() for tr in transactions]
+        else:
+            self.unconfirmed_transactions: list[SimpleTransaction] = []
 
     def create_genesis_block(self):
         genesis_block = SimpleBlock(0, datetime.now(), "0")
-        genesis_block.previous_hash = 0
+        self.proof_of_work(genesis_block)
         self.chain.append(genesis_block)
 
     @staticmethod
@@ -47,8 +55,11 @@ class SimpleBlockchain(BlockChain):
         set by the blockchain. The nonce is then stored in the block
         :return:
         """
-        previous_proof = self.get_last_bloc.proof
         current_index = len(self.chain)
+        if current_index == 0:
+            previous_proof = 0
+        else:
+            previous_proof = self.get_last_bloc.proof
         while True:
             digested_data = SimpleBlockchain.digest_proof_and_transactions(
                 previous_proof=previous_proof,
