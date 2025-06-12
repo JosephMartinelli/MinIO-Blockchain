@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from app.nodes import light_node, full_node
-from app.config import settings, NodeRole
+from app.config import NodeRole, settings
 from contextlib import asynccontextmanager
-from app.startup import populate_local_blockchain
+from app.startup import create_genesis_block_contracts
 
 
 @asynccontextmanager
@@ -13,8 +13,9 @@ async def lifespan(app: FastAPI):
     is run only once.
     """
     # We fetch from other admin
-    if settings.node_role == NodeRole.PUBLISHER:
-        populate_local_blockchain()
+    # if settings.node_role == NodeRole.PUBLISHER and settings.peers == "":
+    create_genesis_block_contracts()
+    raise EOFError
     yield
 
 

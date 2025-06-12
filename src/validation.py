@@ -1,4 +1,4 @@
-import datetime
+from datetime import date
 
 from pydantic import BaseModel, ConfigDict, condate
 
@@ -42,7 +42,7 @@ class ChallengeRequest(BaseModel):
 class ChallengeResponse(BaseModel):
     nonce: str
     domain: str
-    expire: condate(ge=datetime.datetime.now())
+    expire: condate(ge=date.today())
 
 
 class AccessRequest(BaseModel):

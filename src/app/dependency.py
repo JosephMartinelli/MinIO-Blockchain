@@ -22,5 +22,10 @@ def get_blockchain() -> ACBlockchain:
     return blockchain
 
 
+def set_global_chain(new_chain: ACBlockchain) -> None:
+    global blockchain
+    blockchain = new_chain
+
+
 def create_blockchain():
     return ACBlockchain(difficulty=settings.chain_difficulty)

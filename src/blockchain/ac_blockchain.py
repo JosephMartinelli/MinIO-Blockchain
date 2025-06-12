@@ -12,7 +12,6 @@ from .errors import (
     NoTransactionsFound,
     ContractNotFound,
     InvalidChain,
-    ContractError,
 )
 from .smart_contract import SmartContract
 
@@ -96,6 +95,7 @@ class ACBlockchain(BlockChain):
         contract_info = self.find_contract("MAC")
         if contract_info.empty:
             raise ContractNotFound("Could not find MAC")
+        print(contract_info)
         # We temporally add a new block to the chain so
         # that any smart contract could modify it
         # In case of errors we revert back
@@ -104,10 +104,10 @@ class ACBlockchain(BlockChain):
             # For each transaction call the MAC and execute it
             for transaction in self.unconfirmed_transactions:
                 smart_contract = SmartContract.decode(
-                    contract_info[0, "contrat_bytecode"]
+                    contract_info.loc[0, "contract_bytecode"]
                 )
                 smart_contract(transaction.model_dump(), self.get_last_bloc.get_headers)
-        except ContractError:
+        except Exception:
             self.chain.pop(-1)
             raise InvalidChain("Could not mine block due to a contract error")
 

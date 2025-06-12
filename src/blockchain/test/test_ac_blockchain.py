@@ -1,22 +1,33 @@
+import datetime
 
 import pytest
 
 from ..ac_blockchain import ACBlockchain
 from ..ac_block import ACBlock
-from ..errors import ContractNotFound
+from ..errors import ContractNotFound, InvalidChain
 import pandas as pd
 from copy import deepcopy
 from pydantic import ValidationError
 from datetime import date
 
+
+from ..smart_contract import SmartContract
+
 blockchain = ACBlockchain(difficulty=3)
 transaction = {
     "contract_address": "",
-    "data": [""],
-    "timestamp": "",
+    "data": ["test"],
+    "timestamp": datetime.date.today(),
     "requester_id": "",
     "requester_pk": "",
-    "transaction_type": "",
+    "transaction_type": "ADD_CONTRACT",
+}
+mock_contract_data = {
+    "timestamp": [],
+    "contract_name": [],
+    "contract_address": [],
+    "contract_description": [],
+    "contract_bytecode": [],
 }
 
 
@@ -94,11 +105,32 @@ def test_mine_no_mac():
     local_tr["transaction_type"] = "ADD_CONTRACT"
     local_tr["timestamp"] = date.today()
     blockchain.add_new_transaction([local_tr])
-    for block in blockchain.chain:
-        print(block)
     with pytest.raises(ContractNotFound):
         blockchain.mine()
 
 
-def test_mine_transaction():
-    pass
+def test_mine_with_mac_contract_error():
+    def MAC(data: dict, context: list[pd.DataFrame]) -> tuple:
+        print(data, context)
+        raise Exception
+
+    global mock_contract_data, transaction
+    local_contrat = deepcopy(mock_contract_data)
+    local_contrat["timestamp"].append(datetime.date.today())
+    local_contrat["contract_name"].append("MAC")
+    local_contrat["contract_description"].append("")
+    local_contrat["contract_bytecode"].append(SmartContract.encode(MAC))
+    local_contrat["contract_address"].append(
+        SmartContract.create_address(SmartContract.encode(MAC))
+    )
+    # Creating a genesis block and adding it
+    genesis = ACBlock(
+        index=0,
+        previous_hash="0",
+        timestamp=datetime.datetime.now(),
+        contract_header=pd.DataFrame(local_contrat),
+    )
+    local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
+    local_chain.add_new_transaction([deepcopy(transaction)])
+    with pytest.raises(InvalidChain):
+        local_chain.mine()
