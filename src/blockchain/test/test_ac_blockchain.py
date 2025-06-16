@@ -56,6 +56,14 @@ def test_create_passed_genesis_block():
     assert local_chain.chain[-1].proof != 0
 
 
+def test_ac_header_creation():
+    local_chain = ACBlockchain(difficulty=3)
+    genesis = local_chain.get_last_bloc
+    assert bool(genesis.ac_headers)  # Dictionary must not be empty
+    for header in genesis.ac_headers.values():
+        assert header.empty
+
+
 def test_digest_proof_and_no_dataframes():
     genesis = ACBlock(index=0, timestamp="10", previous_hash="100", proof=100)
     assert ACBlockchain.digest_proof_and_transactions(
@@ -84,7 +92,10 @@ def test_digest_proof_with_dataframes():
         }
     )
     block = ACBlock(
-        index=50, timestamp="10", previous_hash="100", policy_heder=policy_header
+        index=50,
+        timestamp="10",
+        previous_hash="100",
+        ac_headers={"policy_header": policy_header},
     )
     assert ACBlockchain.digest_proof_and_transactions(
         1, block.proof, block.proof, block.get_headers
@@ -110,8 +121,8 @@ def test_mine_no_mac():
 
 
 def test_mine_with_mac_contract_error():
-    def MAC(data: dict, context: list[pd.DataFrame]) -> tuple:
-        print(data, context)
+    def MAC(data: dict, block: ACBlock) -> tuple:
+        print(data, block)
         raise ArithmeticError
 
     global mock_contract_data, transaction
@@ -128,7 +139,7 @@ def test_mine_with_mac_contract_error():
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        contract_header=pd.DataFrame(local_contrat),
+        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
     local_chain.add_new_transaction([deepcopy(transaction)])
@@ -141,9 +152,9 @@ def test_mine_mac_log_effect():
         import pandas as pd
         import datetime
 
-        block.events = pd.concat(
+        block.ac_headers["events"] = pd.concat(
             [
-                block.events,
+                block.ac_headers["events"],
                 pd.DataFrame(
                     [
                         [
@@ -178,12 +189,12 @@ def test_mine_mac_log_effect():
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        contract_header=pd.DataFrame(local_contrat),
+        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
     local_chain.add_new_transaction([deepcopy(transaction)])
     local_chain.mine()
-    assert not local_chain.get_last_bloc.events.empty
+    assert not local_chain.get_last_bloc.ac_headers["events"].empty
 
 
 def test_mac_calling_other_contracts():
@@ -192,8 +203,8 @@ def test_mac_calling_other_contracts():
 
         if data["transaction_type"] == "AUTHORIZATION":
             # Fetch PDC
-            result: pd.DataFrame = block.contract_header.loc[
-                block.contract_header["contract_name"] == "PDC"
+            result: pd.DataFrame = block.ac_headers["contract_header"].loc[
+                block.ac_headers["contract_header"]["contract_name"] == "PDC"
             ]
             assert not result.empty
             smart_contract = SmartContract.decode(result["contract_bytecode"].values[0])
@@ -225,7 +236,7 @@ def test_mac_calling_other_contracts():
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        contract_header=pd.DataFrame(local_contrat),
+        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
     local_chain.add_new_transaction([deepcopy(transaction)])
@@ -238,8 +249,8 @@ def test_mac_calling_other_contracts_headers_can_be_modified():
 
         if data["transaction_type"] == "AUTHORIZATION":
             # Fetch PDC
-            result: pd.DataFrame = block.contract_header.loc[
-                block.contract_header["contract_name"] == "PDC"
+            result: pd.DataFrame = block.ac_headers["contract_header"].loc[
+                block.ac_headers["contract_header"]["contract_name"] == "PDC"
             ]
             assert not result.empty
             smart_contract = SmartContract.decode(result["contract_bytecode"].values[0])
@@ -251,9 +262,9 @@ def test_mac_calling_other_contracts_headers_can_be_modified():
         import pandas as pd
         import datetime
 
-        block.events = pd.concat(
+        block.ac_headers["events"] = pd.concat(
             [
-                block.events,
+                block.ac_headers["events"],
                 pd.DataFrame(
                     [
                         [
@@ -274,7 +285,7 @@ def test_mac_calling_other_contracts_headers_can_be_modified():
             ignore_index=True,
         )
 
-    return True
+        return True
 
     global mock_contract_data, transaction
     local_contrat = deepcopy(mock_contract_data)
@@ -297,9 +308,9 @@ def test_mac_calling_other_contracts_headers_can_be_modified():
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        contract_header=pd.DataFrame(local_contrat),
+        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
     local_chain.add_new_transaction([deepcopy(transaction)])
     assert local_chain.mine()
-    assert not local_chain.get_last_bloc.contract_header.empty
+    assert not local_chain.get_last_bloc.ac_headers["contract_header"].empty

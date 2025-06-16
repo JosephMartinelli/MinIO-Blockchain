@@ -40,7 +40,10 @@ class ACBlockchain(BlockChain):
 
     @staticmethod
     def digest_proof_and_transactions(
-        previous_proof: int, next_proof: int, index: int, headers: list[pd.DataFrame]
+        previous_proof: int,
+        next_proof: int,
+        index: int,
+        headers: dict[str, pd.DataFrame],
     ) -> bytes:
         """
         This function ties together two blocks by digesting the previous block's proof with the one
@@ -52,7 +55,10 @@ class ACBlockchain(BlockChain):
         :return:
         """
         math_proof = str(previous_proof**2 - next_proof**2 + index).encode()
-        return math_proof + "".join([header.to_json() for header in headers]).encode()
+        return (
+            math_proof
+            + "".join([header.to_json() for header in headers.values()]).encode()
+        )
 
     def proof_of_work(self, block_to_calculate_proof: ACBlock) -> None:
         """
@@ -124,7 +130,7 @@ class ACBlockchain(BlockChain):
         pass
 
     def find_contract(self, contract_name: str) -> pd.DataFrame:
-        df: pd.DataFrame = self.get_last_bloc.contract_header
+        df: pd.DataFrame = self.get_last_bloc.ac_headers["contract_header"]
         return df.loc[df["contract_name"] == contract_name]
 
     def create_blockchain_from_request(self, data: list[dict]) -> bool:

@@ -27,7 +27,7 @@ def create_genesis_block_contracts():
         os.path.dirname(os.path.abspath(__file__)), "app/startup.py"
     )
     foo = importlib.util.module_from_spec(spec)
-    sys.modules["test"] = foo
+    sys.modules["startup"] = foo
     spec.loader.exec_module(foo)
     cll_list = getmembers(foo, isfunction)
     contract_data = {
@@ -51,6 +51,7 @@ def create_genesis_block_contracts():
         index=0,
         timestamp=datetime.datetime.now(),
         previous_hash="0",
+        # TODO: Fix this
         contract_header=pd.DataFrame(contract_data),
     )
     set_global_chain(
@@ -58,14 +59,14 @@ def create_genesis_block_contracts():
     )
 
 
-def MAC(data: dict, context: list[pd.DataFrame]):
-    print(data, context)
-
-
 # Here is a list of function that will be embedded in the blockchain
-def generate_nonce_and_log(user_auth: str, permissions: str) -> bool:
+def MAC(data: dict, block: ACBlock):
     pass
 
 
-def fetch_permissions(user_data) -> str:
+def PPC_log(user_auth: str, permissions: str) -> bool:
+    pass
+
+
+def PPC_generate_nonce() -> str:
     pass
