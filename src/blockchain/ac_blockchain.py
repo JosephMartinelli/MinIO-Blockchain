@@ -14,6 +14,7 @@ from .errors import (
     InvalidChain,
 )
 from .smart_contract import SmartContract
+from typing import Callable
 
 
 class ACBlockchain(BlockChain):
@@ -98,9 +99,7 @@ class ACBlockchain(BlockChain):
             raise NoTransactionsFound("No unconfirmed transactions have been found!")
 
         # Find MAC Address
-        contract_info = self.find_contract("MAC")
-        if contract_info.empty:
-            raise ContractNotFound("Could not find MAC")
+        MAC = self.find_contract("MAC")
         # We temporally add a new block to the chain so
         # that any smart contract could modify it
         # In case of errors we revert back
@@ -108,10 +107,7 @@ class ACBlockchain(BlockChain):
         try:
             # For each transaction call the MAC and execute it
             for transaction in self.unconfirmed_transactions:
-                smart_contract = SmartContract.decode(
-                    contract_info["contract_bytecode"].values[0]
-                )
-                smart_contract(transaction.model_dump(), self.get_last_bloc)
+                MAC(transaction.model_dump(), self.get_last_bloc)
         except Exception:
             self.chain.pop(-1)
             raise InvalidChain("Could not mine block due to a contract error")
@@ -129,9 +125,17 @@ class ACBlockchain(BlockChain):
     ) -> bool:
         pass
 
-    def find_contract(self, contract_name: str) -> pd.DataFrame:
+    def find_contract(
+        self, contract_name: str
+    ) -> Callable[[dict, ACBlock], bool | str | tuple]:
         df: pd.DataFrame = self.get_last_bloc.ac_headers["contract_header"]
-        return df.loc[df["contract_name"] == contract_name]
+        to_return: pd.DataFrame = df.loc[df["contract_name"] == contract_name]
+        if to_return.empty:
+            raise ContractNotFound(
+                f"No contract with name {contract_name} has been found"
+            )
+        else:
+            return SmartContract.decode(to_return["contract_bytecode"].values[0])
 
     def create_blockchain_from_request(self, data: list[dict]) -> bool:
         pass

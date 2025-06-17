@@ -2,7 +2,12 @@ from fastapi import FastAPI
 from app.nodes import light_node, full_node
 from app.config import NodeRole, settings
 from contextlib import asynccontextmanager
-from app.startup import create_genesis_block_contracts
+from dependency import set_global_chain
+import pandas as pd
+import datetime
+from app.onstartup_contracts import load_contracts
+from blockchain.ac_blockchain import ACBlock, ACBlockchain
+from onstartup_policies import load_policies
 
 
 @asynccontextmanager
@@ -13,9 +18,22 @@ async def lifespan(app: FastAPI):
     is run only once.
     """
     # We fetch from other admin
-    # if settings.node_role == NodeRole.PUBLISHER and settings.peers == "":
-    create_genesis_block_contracts()
-    raise EOFError
+    if settings.node_role == NodeRole.PUBLISHER and settings.peers == "":
+        contract_header: pd.DataFrame = load_contracts()
+        policy_header: pd.DataFrame = load_policies()
+        # We set the blockchain that will be used by the node
+        genesis = ACBlock(
+            index=0,
+            timestamp=datetime.datetime.now(),
+            previous_hash="0",
+            ac_headers={
+                "contract_header": pd.DataFrame(contract_header),
+                "policy_header": pd.DataFrame(policy_header),
+            },
+        )
+        set_global_chain(
+            ACBlockchain(difficulty=settings.chain_difficulty, genesis_block=genesis)
+        )
     yield
 
 

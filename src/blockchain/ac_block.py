@@ -45,8 +45,8 @@ class ACBlock(Block):
                     "transaction_type",
                 ]
             ),  # This list will log all the transactions that are committed to the bc
-            "clients": pd.DataFrame(
-                columns=["timestamp", "requester_id", "requester_pk", "nonce"]
+            "identity": pd.DataFrame(
+                columns=["timestamp", "ip", "pk", "role", "nonce"]
             ),
         }
 
@@ -78,6 +78,7 @@ class ACBlock(Block):
         str_header = ""
         for header in obj_dict["ac_headers"].values():
             str_header += header.to_json()
+        # So that json_dumps then works
         del obj_dict["ac_headers"]
         return hashlib.sha256((json.dumps(obj_dict) + str_header).encode()).hexdigest()
 
