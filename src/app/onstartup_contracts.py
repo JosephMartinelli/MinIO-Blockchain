@@ -18,6 +18,7 @@ def load_contracts() -> pd.DataFrame:
     :return:
     """
     from inspect import getmembers, isfunction
+
     # Fetching all the functions in this module
     spec = importlib.util.spec_from_file_location(
         os.path.dirname(os.path.abspath(__file__)), "app/onstartup_contracts.py"
