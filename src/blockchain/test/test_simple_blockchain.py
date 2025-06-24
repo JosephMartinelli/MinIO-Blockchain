@@ -1,7 +1,7 @@
 import pytest
 
 from ..simple_blockchain import SimpleBlockchain
-from ..transaction import SimpleTransaction
+from ..simple_transaction import SimpleTransaction
 from ..simple_block import SimpleBlock
 from ..smart_contract import SmartContract
 from ..errors import ContractNotFound, NoTransactionsFound, InvalidChain

@@ -1,6 +1,6 @@
 from .block import Block
 from datetime import datetime
-from .transaction import SimpleTransaction
+from .simple_transaction import SimpleTransaction
 
 
 class SimpleBlock(Block):
@@ -13,7 +13,7 @@ class SimpleBlock(Block):
         transactions: list[SimpleTransaction] = None,
     ):
         super().__init__(index, timestamp, previous_hash, proof)
-        # Transactional data is validated against a Transaction Model defined in transaction.py
+        # Transactional data is validated against a Transaction Model defined in simple_transaction.py
         if transactions:
             self.transactions = [
                 item.model_dump() for item in transactions

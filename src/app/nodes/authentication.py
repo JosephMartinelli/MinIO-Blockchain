@@ -3,7 +3,6 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from ..dependency import get_peers, get_blockchain
 from blockchain.ac_blockchain import ACBlockchain
-from blockchain.transaction import ACTransaction
 from blockchain.ac_block import ACBlock
 from validation import ChallengeRequest, ChallengeResponse
 from typing import Annotated
@@ -29,4 +28,3 @@ def challenge(
         "requester_id": request["client_id"],
         "requester_group": None,
     }
-    transaction = ACTransaction(data=tr_payload, is_contract=False, contract_address="")

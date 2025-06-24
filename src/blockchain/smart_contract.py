@@ -3,7 +3,6 @@ import marshal
 import types
 import ast
 import hashlib
-from .ac_block import ACBlock
 
 
 class SmartContract:
@@ -13,7 +12,7 @@ class SmartContract:
         self.decoded_function = None
 
     @staticmethod
-    def encode(func: Callable[[dict, ACBlock], bool | str | tuple]) -> str:
+    def encode(func: Callable[[dict, ...], bool | str | tuple | None]) -> str:
         func_code = getattr(func, "__code__", None)
         new_code = func_code.replace(co_filename="generated")
         encoded_func = marshal.dumps(new_code)

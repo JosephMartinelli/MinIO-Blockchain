@@ -18,6 +18,7 @@ def load_contracts() -> pd.DataFrame:
     :return:
     """
     from inspect import getmembers, isfunction
+
     # Fetching all the functions in this module
     spec = importlib.util.spec_from_file_location(
         os.path.dirname(os.path.abspath(__file__)), "app/onstartup_contracts.py"
@@ -48,15 +49,50 @@ def load_contracts() -> pd.DataFrame:
 
 # Here is a list of function that will be embedded in the blockchain
 def MAC(transactions: dict, block: ACBlock):
+    ppc_log = block.find_contract("PPC_log")
     for tr in transactions:
-        # Then we search for the PPC that authenticates
-        if tr["transaction_type"] == "AUTHENTICATION":
+        if tr["transaction_type"] == "REQUEST_CHALLENGE":
+            gen_nonce = block.find_contract("PPC_challenge_message")
+            nonce = gen_nonce(block)
+        elif tr["transaction_type"] == "ADD_CONTRACT":
             pass
+        elif tr["transaction_type"] == "AUTHORIZATION":
+            pass
+        ppc_log(tr, block)
 
 
-def PPC_log(user_auth: str, permissions: str, block: ACBlock) -> bool:
+def PPC_log(request: dict, block: ACBlock) -> None:
+    """
+    This smart contract records requests onto the events header, tracking who requested what
+    :return:
+    """
+    import datetime
+    import pandas as pd
+
+    to_log = pd.Series(
+        {
+            "timestamp": datetime.datetime.now(),
+            "requester_id": request["requester_id"],
+            "requester_pk": request["requester_pk"],
+            "transaction_type": request["transaction_type"],
+        }
+    )
+    block.ac_headers["events"] = pd.concat(
+        [block.ac_headers["events"], to_log.to_frame().T], ignore_index=True
+    )
+
+
+def PPC_challenge_message(block: ACBlock) -> str:
+    """
+
+    :param block:
+    :return:
+    """
+
+
+def PPC_attach_policy():
     pass
 
 
-def PPC_generate_nonce(block: ACBlock) -> str:
+def PPC_detach_policy():
     pass

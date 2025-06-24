@@ -1,4 +1,6 @@
 import datetime
+import random
+from typing import Callable
 
 import pytest
 
@@ -7,28 +9,79 @@ from ..ac_block import ACBlock
 from ..errors import ContractNotFound, InvalidChain
 import pandas as pd
 from copy import deepcopy
-from pydantic import ValidationError
-from datetime import date
-
 
 from ..smart_contract import SmartContract
+from ..ac_transaction import ACPolicy, Statement
 
 blockchain = ACBlockchain(difficulty=3)
-transaction = {
-    "contract_address": "",
-    "data": ["test"],
-    "timestamp": datetime.date.today(),
-    "requester_id": "",
-    "requester_pk": "",
-    "transaction_type": "AUTHORIZATION",
+mock_statements = {
+    f"{i}": Statement(
+        version="A version", sid=f"{i}", effect="Allow", resource="A resource"
+    )
+    for i in range(10)
 }
-mock_contract_data = {
-    "timestamp": [],
-    "contract_name": [],
-    "contract_address": [],
-    "contract_description": [],
-    "contract_bytecode": [],
-}
+
+mock_contract_header: pd.DataFrame = pd.DataFrame(
+    {
+        "timestamp": ["a timestamp" for i in range(10)],
+        "contract_name": ["a contract_name" for i in range(10)],
+        "contract_address": ["an address" for i in range(10)],
+        "contract_description": ["a description" for i in range(10)],
+        "contract_bytecode": [b"a bytecode" for i in range(10)],
+    }
+)
+
+mock_events: pd.DataFrame = pd.DataFrame(
+    {
+        "timestamp": ["a timestamp" for i in range(10)],
+        "requester_id": ["a requester id" for i in range(10)],
+        "requester_pk": ["a requester pk" for i in range(10)],
+        "transaction_type": ["a type" for i in range(10)],
+    }
+)
+
+mock_identity: pd.DataFrame = pd.DataFrame(
+    data={
+        "timestamp": ["a timestamp" for i in range(10)],
+        "ip": ["an ip" for i in range(10)],
+        "pk": ["a pk" for i in range(10)],
+        "role": ["a role" for i in range(10)],
+        "nonce": ["a nonce" for i in range(10)],
+    }
+)
+
+
+@pytest.fixture
+def statements():
+    return deepcopy(mock_statements)
+
+
+@pytest.fixture
+def policy(statements):
+    return ACPolicy(id="An id", action="add", statements=statements)
+
+
+@pytest.fixture
+def headers():
+    return (
+        deepcopy(mock_contract_header),
+        deepcopy(mock_events),
+        deepcopy(mock_identity),
+    )
+
+
+def append_to_contract_header(df: pd.DataFrame, func: Callable) -> pd.DataFrame:
+    to_append = pd.Series(
+        [
+            "a timestamp",
+            func.__name__,
+            SmartContract.create_address(SmartContract.encode(func)),
+            "a description",
+            SmartContract.encode(func),
+        ],
+        index=list(df),
+    )
+    return pd.concat([df, to_append.to_frame().T], ignore_index=True)
 
 
 ## Cleanup function
@@ -56,22 +109,14 @@ def test_create_passed_genesis_block():
     assert local_chain.chain[-1].proof != 0
 
 
-def test_ac_header_creation():
-    local_chain = ACBlockchain(difficulty=3)
-    genesis = local_chain.get_last_bloc
-    assert bool(genesis.ac_headers)  # Dictionary must not be empty
-    for header in genesis.ac_headers.values():
-        assert header.empty
-
-
 def test_digest_proof_and_no_dataframes():
     genesis = ACBlock(index=0, timestamp="10", previous_hash="100", proof=100)
     assert ACBlockchain.digest_proof_and_transactions(
-        1, genesis.proof, genesis.index, genesis.get_headers
+        1, genesis.proof, genesis.index, genesis.body
     )
 
 
-def test_proof_of_work_no_dataframes():
+def test_proof_of_work_no_data():
     block = ACBlock(
         index=50,
         timestamp="10",
@@ -81,80 +126,59 @@ def test_proof_of_work_no_dataframes():
     assert block.proof != 0
 
 
-def test_digest_proof_with_dataframes():
-    policy_header = pd.DataFrame(
-        {
-            "requester_id": ["1", "100", "1000"],
-            "requester_group": ["user", "user", "user"],
-            "action": ["s3:getBucket", "s3:getBucket", "s3:getBucket"],
-            "resource": ["test", "test", "test"],
-            "allowed": [False, False, False],
-        }
-    )
+def test_digest_proof_with_dataframes(policy, headers):
+    contract, events, identity = headers
     block = ACBlock(
         index=50,
         timestamp="10",
         previous_hash="100",
-        ac_headers={"policy_header": policy_header},
+        policies=[policy],
+        contract_header=contract,
+        events=events,
+        identity=identity,
     )
     assert ACBlockchain.digest_proof_and_transactions(
-        1, block.proof, block.proof, block.get_headers
+        1, block.proof, block.proof, block.body
     )
 
 
-def test_mine_invalid_transactions():
-    global blockchain, transaction
-    local_tr = deepcopy(transaction)
-    local_tr["transaction_type"] = "10"
-    with pytest.raises(ValidationError):
-        blockchain.add_new_transaction([local_tr])
-
-
-def test_mine_no_mac():
-    global blockchain, transaction
-    local_tr = deepcopy(transaction)
-    local_tr["transaction_type"] = "ADD_CONTRACT"
-    local_tr["timestamp"] = date.today()
-    blockchain.add_new_transaction([local_tr])
+def test_mine_no_mac(policy):
+    global blockchain
+    blockchain.add_new_transaction([policy])
     with pytest.raises(ContractNotFound):
         blockchain.mine()
 
 
-def test_mine_with_mac_contract_error():
+def test_mine_with_mac_contract_error(policy, headers):
     def MAC(data: dict, block: ACBlock) -> tuple:
         print(data, block)
         raise ArithmeticError
 
-    global mock_contract_data, transaction
-    local_contrat = deepcopy(mock_contract_data)
-    local_contrat["timestamp"].append(datetime.date.today())
-    local_contrat["contract_name"].append("MAC")
-    local_contrat["contract_description"].append("")
-    local_contrat["contract_bytecode"].append(SmartContract.encode(MAC))
-    local_contrat["contract_address"].append(
-        SmartContract.create_address(SmartContract.encode(MAC))
-    )
+    contract, events, identity = headers
+    contract = append_to_contract_header(contract, MAC)
     # Creating a genesis block and adding it
     genesis = ACBlock(
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
+        contract_header=contract,
+        events=events,
+        identity=identity,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([deepcopy(transaction)])
+    local_chain.add_new_transaction([policy])
     with pytest.raises(InvalidChain):
         local_chain.mine()
 
 
-def test_mine_mac_log_effect():
-    def MAC(data: dict, block: ACBlock) -> tuple:
+def test_mine_mac_log_effect(headers, policy):
+    def MAC(data: dict, block: ACBlock) -> None:
         import pandas as pd
         import datetime
 
-        block.ac_headers["events"] = pd.concat(
+        block.body.events = pd.concat(
             [
-                block.ac_headers["events"],
+                block.body.events,
                 pd.DataFrame(
                     [
                         [
@@ -175,96 +199,119 @@ def test_mine_mac_log_effect():
             ignore_index=True,
         )
 
-    global mock_contract_data, transaction
-    local_contrat = deepcopy(mock_contract_data)
-    local_contrat["timestamp"].append(datetime.date.today())
-    local_contrat["contract_name"].append("MAC")
-    local_contrat["contract_description"].append("")
-    local_contrat["contract_bytecode"].append(SmartContract.encode(MAC))
-    local_contrat["contract_address"].append(
-        SmartContract.create_address(SmartContract.encode(MAC))
-    )
+    contract, events, identity = headers
+    contract = append_to_contract_header(contract, MAC)
     # Creating a genesis block and adding it
     genesis = ACBlock(
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
+        contract_header=contract,
+        events=events,
+        identity=identity,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([deepcopy(transaction)])
-    local_chain.mine()
-    assert not local_chain.get_last_bloc.ac_headers["events"].empty
+    local_chain.add_new_transaction([policy])
+    last_block = local_chain.get_last_bloc
+    assert local_chain.mine()
+    # Now we check if the events table has been modified and the block has been added
+    assert last_block != local_chain.get_last_bloc, print(
+        "\n", last_block, "\n", blockchain.get_last_bloc
+    )
+    df = local_chain.get_last_bloc.body.events
+    assert not df.loc[df["transaction_type"] == "AUTHENTICATION"].empty
 
 
-def test_mac_calling_other_contracts():
+def test_mac_calling_other_contracts(headers, policy):
     def MAC(data: dict, block: ACBlock):
         import pandas as pd
 
-        if data["transaction_type"] == "AUTHORIZATION":
-            # Fetch PDC
-            result: pd.DataFrame = block.ac_headers["contract_header"].loc[
-                block.ac_headers["contract_header"]["contract_name"] == "PDC"
-            ]
-            assert not result.empty
-            smart_contract = SmartContract.decode(result["contract_bytecode"].values[0])
-            # Execute PDC
-            assert smart_contract(data, block)
+        # Fetch PDC
+        result: pd.DataFrame = block.body.contract_header.loc[
+            block.body.contract_header["contract_name"] == "PDC"
+        ]
+        assert not result.empty
+        smart_contract = SmartContract.decode(result["contract_bytecode"].values[0])
+        # Execute PDC
+        assert smart_contract(data, block)
         return True
 
     def PDC(data: dict, block: ACBlock):
         return True
 
-    global mock_contract_data, transaction
-    local_contrat = deepcopy(mock_contract_data)
-    local_contrat["timestamp"].append(datetime.date.today())
-    local_contrat["contract_name"].append("MAC")
-    local_contrat["contract_description"].append("")
-    local_contrat["contract_bytecode"].append(SmartContract.encode(MAC))
-    local_contrat["contract_address"].append(
-        SmartContract.create_address(SmartContract.encode(MAC))
-    )
-    local_contrat["timestamp"].append(datetime.date.today())
-    local_contrat["contract_name"].append("PDC")
-    local_contrat["contract_description"].append("")
-    local_contrat["contract_bytecode"].append(SmartContract.encode(PDC))
-    local_contrat["contract_address"].append(
-        SmartContract.create_address(SmartContract.encode(PDC))
-    )
+    contract, events, identity = headers
+    contract = append_to_contract_header(contract, MAC)
+    contract = append_to_contract_header(contract, PDC)
     # Creating a genesis block and adding it
     genesis = ACBlock(
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
+        contract_header=contract,
+        events=events,
+        identity=identity,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([deepcopy(transaction)])
+    local_chain.add_new_transaction([policy])
     assert local_chain.mine()
 
 
-def test_mac_calling_other_contracts_headers_can_be_modified():
+def test_mac_calling_other_contracts_error(headers, policy):
     def MAC(data: dict, block: ACBlock):
         import pandas as pd
 
-        if data["transaction_type"] == "AUTHORIZATION":
-            # Fetch PDC
-            result: pd.DataFrame = block.ac_headers["contract_header"].loc[
-                block.ac_headers["contract_header"]["contract_name"] == "PDC"
-            ]
-            assert not result.empty
-            smart_contract = SmartContract.decode(result["contract_bytecode"].values[0])
-            # Execute PDC
-            assert smart_contract(data, block)
+        # Fetch PDC
+        result: pd.DataFrame = block.body.contract_header.loc[
+            block.body.contract_header["contract_name"] == "PDC"
+        ]
+        assert not result.empty
+        smart_contract = SmartContract.decode(result["contract_bytecode"].values[0])
+        # Execute PDC
+        assert smart_contract(data, block)
+        return True
+
+    def PDC(data: dict, block: ACBlock):
+        return False
+
+    contract, events, identity = headers
+    contract = append_to_contract_header(contract, MAC)
+    contract = append_to_contract_header(contract, PDC)
+    # Creating a genesis block and adding it
+    genesis = ACBlock(
+        index=0,
+        previous_hash="0",
+        timestamp=datetime.datetime.now(),
+        contract_header=contract,
+        events=events,
+        identity=identity,
+    )
+    local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
+    local_chain.add_new_transaction([policy])
+    with pytest.raises(InvalidChain):
+        local_chain.mine()
+
+
+def test_mac_calling_other_contracts_headers_can_be_modified(headers, policy):
+    def MAC(data: dict, block: ACBlock):
+        import pandas as pd
+
+        # Fetch PDC
+        result: pd.DataFrame = block.body.contract_header.loc[
+            block.body.contract_header["contract_name"] == "PDC"
+        ]
+        assert not result.empty
+        smart_contract = SmartContract.decode(result["contract_bytecode"].values[0])
+        # Execute PDC
+        assert smart_contract(data, block)
         return True
 
     def PDC(data: dict, block: ACBlock):
         import pandas as pd
         import datetime
 
-        block.ac_headers["events"] = pd.concat(
+        block.body.events = pd.concat(
             [
-                block.ac_headers["events"],
+                block.body.events,
                 pd.DataFrame(
                     [
                         [
@@ -284,33 +331,98 @@ def test_mac_calling_other_contracts_headers_can_be_modified():
             ],
             ignore_index=True,
         )
-
         return True
 
-    global mock_contract_data, transaction
-    local_contrat = deepcopy(mock_contract_data)
-    local_contrat["timestamp"].append(datetime.date.today())
-    local_contrat["contract_name"].append("MAC")
-    local_contrat["contract_description"].append("")
-    local_contrat["contract_bytecode"].append(SmartContract.encode(MAC))
-    local_contrat["contract_address"].append(
-        SmartContract.create_address(SmartContract.encode(MAC))
-    )
-    local_contrat["timestamp"].append(datetime.date.today())
-    local_contrat["contract_name"].append("PDC")
-    local_contrat["contract_description"].append("")
-    local_contrat["contract_bytecode"].append(SmartContract.encode(PDC))
-    local_contrat["contract_address"].append(
-        SmartContract.create_address(SmartContract.encode(PDC))
-    )
+    contract, events, identity = headers
+    contract = append_to_contract_header(contract, MAC)
+    contract = append_to_contract_header(contract, PDC)
     # Creating a genesis block and adding it
     genesis = ACBlock(
         index=0,
         previous_hash="0",
         timestamp=datetime.datetime.now(),
-        ac_headers={"contract_header": pd.DataFrame(local_contrat)},
+        contract_header=contract,
+        events=events,
+        identity=identity,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([deepcopy(transaction)])
+    local_chain.add_new_transaction([policy])
     assert local_chain.mine()
-    assert not local_chain.get_last_bloc.ac_headers["contract_header"].empty
+    df = local_chain.get_last_bloc.body.events
+    assert not df.loc[df["transaction_type"] == "AUTHORIZATION"].empty
+
+
+def test_policy_add(policy):
+    mem_policies = {}
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    assert mem_policies[policy.id]
+
+
+def test_policy_remove(policy):
+    mem_policies = {}
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    blockchain.apply_policy_delta(
+        block_policies={"Another id": policy}, mem_policies=mem_policies
+    )
+    policy.action = "remove"
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    assert mem_policies.get(policy.id) is None
+
+
+def test_policy_update_remove_statement(statements, policy):
+    mem_policies = {}
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    to_remove_statements = random.sample(list(statements.values()), k=4)
+    for statement in to_remove_statements:
+        statement.action = "remove"
+    policy = ACPolicy(id=policy.id, action="update", statements=statements)
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    for statement in to_remove_statements:
+        assert mem_policies[policy.id].statements.get(statement.sid, None) is None
+
+
+def test_policy_substitution_statement(statements, policy):
+    mem_policies = {}
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    to_modify_statements = random.sample(list(statements.values()), k=4)
+    for statement in to_modify_statements:
+        statement.effect = "Deny"
+    policy = ACPolicy(id="An id", action="update", statements=statements)
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    for statement in to_modify_statements:
+        modified_statement = mem_policies[policy.id].statements.get(statement.sid, None)
+        assert modified_statement
+        assert modified_statement.effect == "Deny"
+
+
+def test_policy_append_statements(statements, policy):
+    mem_policies = {}
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    to_append = {
+        "100": Statement(
+            version="A version", sid="100", effect="Deny", resource="A resource"
+        )
+    }
+    policy = ACPolicy(id="An id", action="update", statements=to_append)
+    blockchain.apply_policy_delta(
+        block_policies={policy.id: policy}, mem_policies=mem_policies
+    )
+    retrieved_statement = mem_policies[policy.id].statements.get("100", None)
+    assert retrieved_statement
+    assert retrieved_statement.effect == "Deny"

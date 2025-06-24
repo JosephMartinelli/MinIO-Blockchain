@@ -10,7 +10,7 @@ import hashlib
 from typing import List
 from pydantic import TypeAdapter
 from .simple_block import SimpleBlock
-from .transaction import SimpleTransaction
+from .simple_transaction import SimpleTransaction
 from .smart_contract import SmartContract
 from blockchain.blockchain import BlockChain
 from .errors import (

@@ -20,7 +20,7 @@ class BlockChain(ABC):
 
     @abstractmethod
     def create_genesis_block(self):
-        pass
+        raise NotImplementedError
 
     @staticmethod
     @abstractmethod
@@ -30,7 +30,7 @@ class BlockChain(ABC):
         index: int,
         transactions: list[dict],
     ) -> bytes:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def proof_of_work(self, block_to_calculate_proof: Block) -> None:
@@ -39,7 +39,7 @@ class BlockChain(ABC):
         set by the blockchain. The nonce is then stored in the block
         :return:
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def add_new_transaction(self, data: list[dict[str, ...]]):
@@ -49,7 +49,7 @@ class BlockChain(ABC):
         :param data:
         :return:
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def mine(self) -> str:
@@ -59,7 +59,7 @@ class BlockChain(ABC):
         For the time being we do not allow contracts to call other contracts
         :return:
         """
-        pass
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -74,14 +74,14 @@ class BlockChain(ABC):
         valid.
         :return:
         """
-        pass
+        raise NotImplementedError
 
     @staticmethod
     @abstractmethod
     def is_block_valid(
         last_block: Block, new_block: Block, chain_difficulty: int
     ) -> bool:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def find_contract(self, contract_address: str) -> str | None:
@@ -91,7 +91,7 @@ class BlockChain(ABC):
         :param contract_address:
         :return:
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def create_blockchain_from_request(self, data: list[dict]) -> bool:
@@ -101,4 +101,8 @@ class BlockChain(ABC):
         :param data:
         :return:
         """
-        pass
+        raise NotImplementedError
+
+    @abstractmethod
+    def add_block(self, new_block: Block) -> bool:
+        raise NotImplementedError
