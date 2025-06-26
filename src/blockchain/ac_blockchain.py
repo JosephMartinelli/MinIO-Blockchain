@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pandas as pd
 
-from blockchain.block import Block
+from pydantic import TypeAdapter
 from blockchain.blockchain import BlockChain
 from .ac_transaction import ACPolicy
 from blockchain.ac_block import ACBlock, ACBlockBody
@@ -14,7 +14,7 @@ from .errors import (
     InvalidChain,
 )
 from .smart_contract import SmartContract
-from typing import Callable
+from typing import Callable, Dict
 
 
 class ACBlockchain(BlockChain):
@@ -113,7 +113,6 @@ class ACBlockchain(BlockChain):
         except Exception:
             del to_add
             raise InvalidChain("Could not mine block due to a contract error")
-
         self.proof_of_work(to_add)
         self.chain.append(to_add)
         self.unconfirmed_transactions = []
@@ -124,9 +123,26 @@ class ACBlockchain(BlockChain):
 
     @staticmethod
     def is_block_valid(
-        last_block: Block, new_block: Block, chain_difficulty: int
+        last_block: ACBlock, new_block: ACBlock, chain_difficulty: int
     ) -> bool:
-        pass
+        if new_block.index != (last_block.index + 1):
+            raise IndexError(
+                f"Current index is {last_block.index}, but the index passed is {new_block.index}"
+            )
+        if last_block.compute_hash() != new_block.previous_hash:
+            raise InvalidChain(
+                "The passed hash is not consistent with the hash of the last block"
+            )
+        digested_data = ACBlockchain.digest_proof_and_transactions(
+            next_proof=new_block.proof,
+            previous_proof=last_block.proof,
+            block_body=new_block.body,
+            index=new_block.index,
+        )
+        block_hash = hashlib.sha256(digested_data).hexdigest()
+        if not block_hash.startswith("0" * chain_difficulty):
+            raise InvalidChain("Block hash is not consistent with chain difficulty")
+        return True
 
     def find_contract(
         self, contract_name: str
@@ -141,10 +157,39 @@ class ACBlockchain(BlockChain):
             return SmartContract.decode(to_return["contract_bytecode"].values[0])
 
     def create_blockchain_from_request(self, data: list[dict]) -> bool:
-        pass
+        tr_val = TypeAdapter(Dict[str, ACPolicy])
+        temp_chain = []
+        for index, block_dict in enumerate(data):
+            # Check if the transaction are valid by calling the validator
+            if block_dict["body"]["policies"]:
+                block_dict["body"]["policies"] = tr_val.validate_python(
+                    block_dict["body"]["policies"]
+                )
+            # If the validation is passed then we add the block
+            to_add = ACBlock(**block_dict)
+            if index == 0:
+                temp_chain.append(to_add)
+                continue
+            last_block: ACBlock = temp_chain[-1]
+            if ACBlockchain.is_block_valid(
+                last_block=last_block,
+                new_block=to_add,
+                chain_difficulty=self.difficulty,
+            ):
+                temp_chain.append(to_add)
+            else:
+                return False
+        # Finally we swap
+        self.chain = temp_chain
+        return True
 
     def add_block(self, new_block: ACBlock) -> bool:
-        pass
+        last_block = self.get_last_bloc
+        if ACBlockchain.is_block_valid(last_block, new_block, self.difficulty):
+            self.chain.append(new_block)
+            return True
+        else:
+            return False
 
     @staticmethod
     def apply_policy_delta(
@@ -191,3 +236,9 @@ class ACBlockchain(BlockChain):
                             del mem_policies[block_policy_id].statements[
                                 block_statement_sid
                             ]
+
+    def to_dict(self) -> dict:
+        return {
+            "difficulty": self.difficulty,
+            "chain": [block.to_dict() for block in self.chain],
+        }

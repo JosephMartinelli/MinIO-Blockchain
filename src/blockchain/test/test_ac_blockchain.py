@@ -13,6 +13,8 @@ from copy import deepcopy
 from ..smart_contract import SmartContract
 from ..ac_transaction import ACPolicy, Statement
 
+from pydantic_core._pydantic_core import ValidationError
+
 blockchain = ACBlockchain(difficulty=3)
 mock_statements = {
     f"{i}": Statement(
@@ -27,7 +29,7 @@ mock_contract_header: pd.DataFrame = pd.DataFrame(
         "contract_name": ["a contract_name" for i in range(10)],
         "contract_address": ["an address" for i in range(10)],
         "contract_description": ["a description" for i in range(10)],
-        "contract_bytecode": [b"a bytecode" for i in range(10)],
+        "contract_bytecode": ["b a bytecode str" for i in range(10)],
     }
 )
 
@@ -68,6 +70,46 @@ def headers():
         deepcopy(mock_events),
         deepcopy(mock_identity),
     )
+
+
+def random_headers(headers):
+    contract, events, identity = headers
+    return (
+        contract.sample(frac=0.5),
+        events.sample(frac=0.5),
+        identity.sample(frac=0.5),
+    )
+
+
+def random_statements():
+    random_sts = random.sample(list(deepcopy(mock_statements).values()), 5)
+    return {random_st.sid: random_st for random_st in random_sts}
+
+
+def random_policies():
+    return [
+        ACPolicy(id=str(i), action="add", statements=random_statements())
+        for i in range(random.randint(0, 10))
+    ]
+
+
+@pytest.fixture
+def chain_with_blocks(headers, policy) -> ACBlockchain:
+    chain = ACBlockchain(difficulty=2)
+    for i in range(10):
+        contract, events, identity = random_headers(headers)
+        block = ACBlock(
+            index=chain.get_last_bloc.index + 1,
+            timestamp=datetime.datetime.now(),
+            previous_hash=chain.get_last_bloc.compute_hash(),
+            policies=random_policies(),
+            contract_header=contract,
+            events=events,
+            identity=identity,
+        )
+        chain.proof_of_work(block)
+        chain.add_block(block)
+    return chain
 
 
 def append_to_contract_header(df: pd.DataFrame, func: Callable) -> pd.DataFrame:
@@ -151,7 +193,6 @@ def test_mine_no_mac(policy):
 
 def test_mine_with_mac_contract_error(policy, headers):
     def MAC(data: dict, block: ACBlock) -> tuple:
-        print(data, block)
         raise ArithmeticError
 
     contract, events, identity = headers
@@ -426,3 +467,83 @@ def test_policy_append_statements(statements, policy):
     retrieved_statement = mem_policies[policy.id].statements.get("100", None)
     assert retrieved_statement
     assert retrieved_statement.effect == "Deny"
+
+
+def test_bad_policy_create_blockchain_from_request(policy, headers, chain_with_blocks):
+    # We get a chain, and we convert it to a string
+    str_chain: list[dict] = [block.to_dict() for block in chain_with_blocks.chain]
+    # Modify random elem
+    for block in random.sample(str_chain, k=2):
+        r_policies: ACPolicy = random.sample(
+            list(block["body"]["policies"].values()), 1
+        )
+        list(r_policies[0]["statements"].values())[0]["version"] = 10
+    local_chain = ACBlockchain(difficulty=chain_with_blocks.difficulty)
+    with pytest.raises(ValidationError):
+        local_chain.create_blockchain_from_request(str_chain)
+
+
+def test_create_blockchain_from_request(policy, headers, chain_with_blocks):
+    # We get a chain, and we convert it to a string
+    str_chain: list[dict] = [block.to_dict() for block in chain_with_blocks.chain]
+    local_chain = ACBlockchain(difficulty=chain_with_blocks.difficulty)
+    assert local_chain.create_blockchain_from_request(str_chain)
+    assert len(local_chain.chain) > 1
+    for local_block, original_block in zip(local_chain.chain, chain_with_blocks.chain):
+        assert local_block == original_block
+
+
+def test_create_blockchain_from_request_can_decode_contracts(
+    policy, headers, chain_with_blocks
+):
+    # We get a chain, and we convert it to a string
+    def MAC(data: dict, block: ACBlock) -> None:
+        import pandas as pd
+        import datetime
+
+        block.body.events = pd.concat(
+            [
+                block.body.events,
+                pd.DataFrame(
+                    [
+                        [
+                            datetime.date.today(),
+                            "An id",
+                            "A key",
+                            "AUTHENTICATION",
+                        ]
+                    ],
+                    columns=[
+                        "timestamp",
+                        "requester_id",
+                        "requester_pk",
+                        "transaction_type",
+                    ],
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    contract, events, identity = headers
+    contract = append_to_contract_header(contract, MAC)
+    new_block = ACBlock(
+        index=chain_with_blocks.get_last_bloc.index + 1,
+        timestamp=datetime.datetime.now(),
+        previous_hash=chain_with_blocks.get_last_bloc.compute_hash(),
+        contract_header=contract,
+    )
+    chain_with_blocks.proof_of_work(new_block)
+    assert chain_with_blocks.add_block(new_block=new_block)
+    str_chain: list[dict] = [block.to_dict() for block in chain_with_blocks.chain]
+    local_chain = ACBlockchain(difficulty=chain_with_blocks.difficulty)
+    assert local_chain.create_blockchain_from_request(str_chain)
+    assert len(local_chain.chain) > 1
+    for local_block, original_block in zip(local_chain.chain, chain_with_blocks.chain):
+        assert local_block == original_block
+    # We check that the contract MAC is present and decodable
+    assert local_chain.get_last_bloc.find_contract("MAC")
+    # We add some transactions, and we check that the MAC can be executed during mining operations
+    local_chain.add_new_transaction(random_policies())
+    assert local_chain.mine()
+    df = local_chain.get_last_bloc.body.events
+    assert not df.loc[df["transaction_type"] == "AUTHENTICATION"].empty

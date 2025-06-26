@@ -172,7 +172,9 @@ async def announce_new_block(blockchain: ACBlockchain, peers: set):
 
 
 @router.post(path="/add-block", status_code=201)
-async def add_block(in_block: InputBlock, blockchain: blockchain_dependency):
+async def add_block(
+    in_block: InputBlock, blockchain: blockchain_dependency, mem_pool: policies_dep
+):
     block = ACBlock(**in_block.model_dump())
     try:
         result = blockchain.add_block(block)
@@ -187,9 +189,12 @@ async def add_block(in_block: InputBlock, blockchain: blockchain_dependency):
             status_code=400,
             content="Last block invalidated the chain, reverting back...",
         )
-    # TODO: If the block is added successfully and the blockchain is valid then we remove
-    #  the transactions added to the block from our local mem pool
-    return
+    # If the block is added successfully and the blockchain is valid then we remove
+    # the transactions added to the block from our local mem pool
+    for policy_key in block.body.policies.keys():
+        if mem_pool.get(policy_key, None) is not None:
+            del mem_pool[policy_key]
+    return JSONResponse(status_code=201, content="Block added successfully")
 
 
 @router.get("/register-peer", status_code=200)

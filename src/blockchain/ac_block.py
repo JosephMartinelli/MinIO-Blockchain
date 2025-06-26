@@ -15,20 +15,29 @@ from .ac_transaction import ACPolicy
 class ACBlockBody:
     def __init__(
         self,
-        policies: list[ACPolicy],
-        contract_header: pd.DataFrame,
-        events: pd.DataFrame,
-        identity: pd.DataFrame,
+        policies: list[ACPolicy] | dict[str, ACPolicy],
+        contract_header: pd.DataFrame | dict,
+        events: pd.DataFrame | dict,
+        identity: pd.DataFrame | dict,
     ):
-        if policies:
-            self.policies: dict[str, ACPolicy] = {
-                policy.id: policy for policy in policies
-            }
-        else:
+        if isinstance(policies, list) and not policies:
             self.policies = {}
-        self.contract_header: pd.DataFrame = contract_header
-        self.events: pd.DataFrame = events
-        self.identity: pd.DataFrame = identity
+        elif isinstance(policies, dict):
+            self.policies = policies
+        else:
+            self.policies = {policy.id: policy for policy in policies}
+
+        self.contract_header: pd.DataFrame = (
+            contract_header
+            if isinstance(contract_header, pd.DataFrame)
+            else pd.DataFrame(contract_header)
+        )
+        self.events: pd.DataFrame = (
+            events if isinstance(events, pd.DataFrame) else pd.DataFrame(events)
+        )
+        self.identity: pd.DataFrame = (
+            identity if isinstance(identity, pd.DataFrame) else pd.DataFrame(identity)
+        )
 
     def __repr__(self) -> str:
         to_return = {}
@@ -52,6 +61,17 @@ class ACBlockBody:
                 and other.events.equals(self.events)
             )
         return NotImplemented
+
+    def to_dict(self) -> dict:
+        return {
+            "policies": {
+                policy_key: policy_val.model_dump()
+                for policy_key, policy_val in self.policies.items()
+            },
+            "contract_header": self.contract_header.to_dict(),
+            "events": self.events.to_dict(),
+            "identity": self.identity.to_dict(),
+        }
 
 
 class ACBlock(Block):
@@ -82,14 +102,20 @@ class ACBlock(Block):
             columns=["timestamp", "ip", "pk", "role", "nonce"]
         ),
         proof: int = 0,
+        body: dict | ACBlockBody = None,
     ):
         super().__init__(index, timestamp, previous_hash, proof)
-        self.body: ACBlockBody = ACBlockBody(
-            policies, contract_header, events, identity
-        )
+        if policies is None:
+            policies = []
+        if not body:
+            self.body: ACBlockBody = ACBlockBody(
+                policies, contract_header, events, identity
+            )
+        else:
+            self.body = body if isinstance(body, ACBlockBody) else ACBlockBody(**body)
 
     def compute_hash(self) -> str:
-        return hashlib.sha256(json.dumps(str(self)).encode()).hexdigest()
+        return hashlib.sha256(json.dumps(self.to_dict()).encode()).hexdigest()
 
     def find_contract(
         self, contract_name: str
@@ -117,5 +143,10 @@ class ACBlock(Block):
 
     def __eq__(self, other) -> bool:
         if isinstance(other, ACBlock):
-            return other.__dict__ == self.__dict__
+            return other.to_dict() == self.to_dict()
         return NotImplemented
+
+    def to_dict(self) -> dict:
+        super_dict = super().to_dict()
+        super_dict.update({"body": self.body.to_dict()})
+        return super_dict

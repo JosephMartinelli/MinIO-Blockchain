@@ -106,3 +106,7 @@ class BlockChain(ABC):
     @abstractmethod
     def add_block(self, new_block: Block) -> bool:
         raise NotImplementedError
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        raise NotImplementedError

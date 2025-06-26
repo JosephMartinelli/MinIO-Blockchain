@@ -1,5 +1,5 @@
 from datetime import datetime
-from abc import ABC
+from abc import ABC, abstractmethod
 import hashlib
 import json
 
@@ -20,10 +20,19 @@ class Block(ABC):
         self.previous_hash = previous_hash
         self.proof = proof
 
-    def compute_hash(self):
+    def compute_hash(self) -> str:
         return hashlib.sha256(
-            json.dumps(self.__dict__, sort_keys=True).encode()
+            json.dumps(self.to_dict(), sort_keys=True).encode()
         ).hexdigest()
 
     def __str__(self):
         return str(self.__dict__)
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        return {
+            "index": self.index,
+            "timestamp": self.timestamp,
+            "previous_hash": self.previous_hash,
+            "proof": self.proof,
+        }

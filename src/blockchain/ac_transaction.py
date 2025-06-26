@@ -1,5 +1,5 @@
 from pydantic import ConfigDict, BaseModel
-from typing import Literal
+from typing import Literal, Dict
 
 
 class Condition(BaseModel):
@@ -11,14 +11,14 @@ class Statement(BaseModel):
     version: str
     sid: str
     effect: Literal["Allow", "Deny"]
-    principal: str = None
+    principal: str = ""
     action: list[str] | str = []
     resource: list[str] | str
-    condition: dict[str, Condition] = []
+    condition: Dict[str, Condition] = {}
 
 
 class ACPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     action: Literal["add", "remove", "update"]
-    statements: dict[str, Statement] = {}
+    statements: Dict[str, Statement] = {}
