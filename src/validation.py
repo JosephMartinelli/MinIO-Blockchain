@@ -1,6 +1,4 @@
-from datetime import date
-
-from pydantic import BaseModel, ConfigDict, condate
+from pydantic import BaseModel, ConfigDict
 
 
 class Transaction(BaseModel):
@@ -34,7 +32,7 @@ class InputBlock(BaseModel):
 
 
 class ChallengeRequest(BaseModel):
-    public_key: str
+    client_pk: str  # Hex format
     client_id: str
     client_name: str
 
@@ -42,7 +40,13 @@ class ChallengeRequest(BaseModel):
 class ChallengeResponse(BaseModel):
     nonce: str
     domain: str
-    expire: condate(ge=date.today())
+    expire: float
+
+
+class UserSignedMessage(BaseModel):
+    message: ChallengeResponse
+    client_pk: str  # Hex format
+    signature: str  # Hex format
 
 
 class AccessRequest(BaseModel):

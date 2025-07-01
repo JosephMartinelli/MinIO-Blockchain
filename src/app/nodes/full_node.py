@@ -2,7 +2,6 @@ import json
 from typing import Annotated
 
 import requests
-from blib2to3.pgen2.driver import Logger
 from fastapi import APIRouter, Depends
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -24,7 +23,7 @@ from ..dependency import (
     get_policies_cache,
 )
 
-import logging
+from logging import Logger
 from anyio import move_on_after
 
 router = APIRouter(
@@ -37,7 +36,7 @@ router = APIRouter(
 )
 
 peers_dependency = Annotated[set, Depends(get_peers)]
-logger_dep = Annotated[logging, Depends(get_logger)]
+logger_dep = Annotated[Logger, Depends(get_logger)]
 policies_dep = Annotated[dict, Depends(get_policies_cache)]
 blockchain_dependency = Annotated[ACBlockchain, Depends(get_blockchain)]
 create_blockchain_dependency = Annotated[ACBlockchain, Depends(create_blockchain)]
@@ -190,10 +189,12 @@ async def add_block(
             content="Last block invalidated the chain, reverting back...",
         )
     # If the block is added successfully and the blockchain is valid then we remove
-    # the transactions added to the block from our local mem pool
-    for policy_key in block.body.policies.keys():
-        if mem_pool.get(policy_key, None) is not None:
-            del mem_pool[policy_key]
+    # the transactions added to the block from our transactions pool
+    new_unconfirmed_transactions = []
+    for policy in blockchain.unconfirmed_transactions:
+        if block.body.policies.get(policy.id, None) is not None:
+            new_unconfirmed_transactions.append(policy)
+    blockchain.unconfirmed_transactions = new_unconfirmed_transactions
     return JSONResponse(status_code=201, content="Block added successfully")
 
 

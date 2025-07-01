@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.nodes import light_node, full_node
+from app.nodes import light_node, full_node, authentication
 from app.config import NodeRole, settings
 from contextlib import asynccontextmanager
 
@@ -35,6 +35,7 @@ app = FastAPI(lifespan=lifespan)
 if settings.node_role == NodeRole.PUBLISHER:
     app.include_router(full_node.router)
     app.include_router(light_node.router)
+    app.include_router(authentication.router)
 else:
     app.include_router(light_node.router)
 
