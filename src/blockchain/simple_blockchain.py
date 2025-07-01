@@ -239,3 +239,6 @@ class SimpleBlockchain(BlockChain):
         # Lastly we swap the current chain with this new chain
         self.chain = new_chain
         return True
+
+    def to_dict(self) -> dict:
+        pass

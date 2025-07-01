@@ -18,13 +18,14 @@ else:
 # assuming loglevel is bound to the string value obtained from the
 # command line argument. Convert to upper case to allow the user to
 # specify --log=DEBUG or --log=debug
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("logger")
+# Clearing log file
+open("app/log/node.log", "w+").close()
 logging.basicConfig(
     filename="app/log/node.log",
-    filemode="w",
+    format="%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
     level=logging.DEBUG,
-    format="%%(asctime)s (levelname)s:%(message)s",
-    datefmt="%m/%d/%Y %I:%M:%S %p",
 )
 
 # Local cache of the policies

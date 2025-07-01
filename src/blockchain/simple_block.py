@@ -25,3 +25,6 @@ class SimpleBlock(Block):
         if isinstance(other, SimpleBlock):
             return other.__dict__ == self.__dict__
         return NotImplemented
+
+    def to_dict(self) -> dict:
+        pass

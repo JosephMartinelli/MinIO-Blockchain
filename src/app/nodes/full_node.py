@@ -24,7 +24,7 @@ from ..dependency import (
 )
 
 from logging import Logger
-from anyio import move_on_after
+from anyio import move_on_after, fail_after
 
 router = APIRouter(
     dependencies=[
@@ -45,7 +45,7 @@ create_blockchain_dependency = Annotated[ACBlockchain, Depends(create_blockchain
 @router.get(path="/")
 async def get_chain(blockchain: blockchain_dependency) -> dict:
     return {
-        "chain": [x.__dict__ for x in blockchain.chain],
+        "chain": [x.to_dict() for x in blockchain.chain],
         "difficulty": blockchain.difficulty,
     }
 
@@ -78,16 +78,20 @@ async def add_new_policy(
 
 async def gossip(policy: dict, peers: set, logger: Logger):
     for peer in peers:
-        response = requests.post(
-            url=f"http://{peer}/add-policy", data=json.dumps(policy)
-        )
-        if response.status_code != 201:
-            logger.warning(
-                f"Peer {peer} returned the following error: {response.status_code}/{response.content}"
-            )
+        try:
+            with fail_after(1):
+                response = requests.post(
+                    url=f"http://{peer}/add-policy", data=json.dumps(policy)
+                )
+                if response.status_code != 201:
+                    logger.warning(
+                        f"Peer {peer} returned the following error: {response.status_code}/{response.content}"
+                    )
+        except (TimeoutError, requests.exceptions.ConnectionError):
+            logger.warning(f"Peer {peer} did not respond to gossip protocol")
 
 
-@router.get("/update-cache")
+@router.get("/update-cache", status_code=200)
 async def update_local_cache(
     mem_policies: policies_dep, blockchain: blockchain_dependency
 ):
@@ -100,7 +104,9 @@ async def update_local_cache(
 
 
 @router.get("/mine", status_code=200)
-async def mine(blockchain: blockchain_dependency, peers: peers_dependency):
+async def mine(
+    blockchain: blockchain_dependency, peers: peers_dependency, logger: logger_dep
+):
     try:
         result = blockchain.mine()
     except NoTransactionsFound:
@@ -112,7 +118,7 @@ async def mine(blockchain: blockchain_dependency, peers: peers_dependency):
     with move_on_after(2.5):
         response = await consensus(peers, blockchain)
     if not response["replaced"]:
-        await announce_new_block(blockchain, peers)
+        await announce_new_block(blockchain, peers, logger)
     return result
 
 
@@ -135,9 +141,9 @@ async def consensus(
             try:
                 response = requests.get(url=f"http://{peer}/")
             except requests.exceptions.ConnectionError:
-                continue
+                logger.warning(f"Peer {peer} did not respond to get_chain")
         if response.status_code != 200:
-            logger.warning("Node could not get peer chain")
+            logger.error(f"Peer {peer} error in getting chain")
         peer_chain = response.json()
         if len(peer_chain) > len(max_chain):
             max_chain = peer_chain
@@ -150,7 +156,7 @@ async def consensus(
     return {"replaced": replaced}
 
 
-async def announce_new_block(blockchain: ACBlockchain, peers: set):
+async def announce_new_block(blockchain: ACBlockchain, peers: set, logger: Logger):
     """
     This function announces the new mined block to all the peers
     :return:
@@ -160,13 +166,14 @@ async def announce_new_block(blockchain: ACBlockchain, peers: set):
         try:
             response = requests.post(
                 url=f"http://{peer_url}/add-block",
-                data=json.dumps(block_to_announce.__dict__),
+                data=json.dumps(block_to_announce.to_dict()),
             )
         except requests.exceptions.ConnectionError:
-            continue
+            logger.warning(f"Peer {peer_url} is unreachable while announcing new block")
         if response.status_code != 201:
-            raise RuntimeError(
-                f"Error in announcing the new block to the other peers\n {response.content}"
+            logger.error(
+                f"The following error "
+                f"occured while announcing the new block to the peer {peer_url}: {response.content}"
             )
 
 

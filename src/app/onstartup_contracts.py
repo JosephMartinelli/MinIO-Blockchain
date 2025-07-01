@@ -52,8 +52,7 @@ def MAC(transactions: dict, block: ACBlock):
     ppc_log = block.find_contract("PPC_log")
     for tr in transactions:
         if tr["transaction_type"] == "REQUEST_CHALLENGE":
-            gen_nonce = block.find_contract("PPC_challenge_message")
-            nonce = gen_nonce(block)
+            pass
         elif tr["transaction_type"] == "ADD_CONTRACT":
             pass
         elif tr["transaction_type"] == "AUTHORIZATION":
@@ -66,20 +65,7 @@ def PPC_log(request: dict, block: ACBlock) -> None:
     This smart contract records requests onto the events header, tracking who requested what
     :return:
     """
-    import datetime
-    import pandas as pd
-
-    to_log = pd.Series(
-        {
-            "timestamp": datetime.datetime.now(),
-            "requester_id": request["requester_id"],
-            "requester_pk": request["requester_pk"],
-            "transaction_type": request["transaction_type"],
-        }
-    )
-    block.ac_headers["events"] = pd.concat(
-        [block.ac_headers["events"], to_log.to_frame().T], ignore_index=True
-    )
+    pass
 
 
 def PPC_challenge_message(block: ACBlock) -> str:
