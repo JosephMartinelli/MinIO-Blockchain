@@ -4,7 +4,7 @@ import pandas as pd
 
 from pydantic import TypeAdapter
 from blockchain.blockchain import BlockChain
-from .ac_transaction import ACPolicy
+from .ac_transaction import ACPolicy, ACResourcePolicy, ACIdentityPolicy
 from blockchain.ac_block import ACBlock, ACBlockBody
 from datetime import datetime
 import hashlib
@@ -56,7 +56,7 @@ class ACBlockchain(BlockChain):
         :return:
         """
         math_proof = str(previous_proof**2 - next_proof**2 + index).encode()
-        return math_proof + str(block_body).encode()
+        return math_proof + str(block_body.to_dict()).encode()
 
     def proof_of_work(self, block_to_calculate_proof: ACBlock) -> None:
         """
@@ -103,12 +103,13 @@ class ACBlockchain(BlockChain):
             timestamp=datetime.now(),
             previous_hash=self.get_last_bloc.compute_hash(),
             contract_header=deepcopy(self.get_last_bloc.body.contract_header),
-            identity=deepcopy(self.get_last_bloc.body.identity),
             events=deepcopy(self.get_last_bloc.body.events),
         )
         try:
             # For each transaction call the MAC and execute it
             for transaction in self.unconfirmed_transactions:
+                # The MAC will also need to understand if the policy passed is an identity policy or a resource one
+                # ( Basically the smart contracts should look for a principal attribute/id )
                 MAC(transaction.model_dump(), to_add)
         except Exception:
             del to_add
@@ -157,13 +158,18 @@ class ACBlockchain(BlockChain):
             return SmartContract.decode(to_return["contract_bytecode"].values[0])
 
     def create_blockchain_from_request(self, data: list[dict]) -> bool:
-        tr_val = TypeAdapter(Dict[str, ACPolicy])
+        resource_val = TypeAdapter(Dict[str, ACResourcePolicy])
+        identity_val = TypeAdapter(Dict[str, Dict[str, ACIdentityPolicy]])
         temp_chain = []
         for index, block_dict in enumerate(data):
             # Check if the transaction are valid by calling the validator
-            if block_dict["body"]["policies"]:
-                block_dict["body"]["policies"] = tr_val.validate_python(
-                    block_dict["body"]["policies"]
+            if block_dict["body"]["resource_policies"]:
+                block_dict["body"]["resource_policies"] = resource_val.validate_python(
+                    block_dict["body"]["resource_policies"]
+                )
+            if block_dict["body"]["identity_policies"]:
+                block_dict["body"]["identity_policies"] = identity_val.validate_python(
+                    block_dict["body"]["identity_policies"]
                 )
             # If the validation is passed then we add the block
             to_add = ACBlock(**block_dict)
@@ -192,10 +198,11 @@ class ACBlockchain(BlockChain):
             return False
 
     @staticmethod
-    def apply_policy_delta(
-        block_policies: dict[str, ACPolicy], mem_policies: dict[str, ACPolicy]
+    def apply_resource_policy_delta(
+        block_resource_policies: dict[str, ACResourcePolicy],
+        mem_policies: dict[str, ACResourcePolicy],
     ):
-        for block_policy_id, block_policy in block_policies.items():
+        for block_policy_id, block_policy in block_resource_policies.items():
             if block_policy.action == "add":
                 mem_policies.update({block_policy_id: block_policy})
             elif block_policy.action == "remove":

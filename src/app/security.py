@@ -106,7 +106,9 @@ def decrypt(ciphertext: bytes) -> bytes:
 
 
 def create_access_token(data: dict) -> str:
-    data.update({"exp": settings.nonce_exp_min * 60 + settings.nonce_exp_s})
+    data.update(
+        {"exp": time.time() + settings.nonce_exp_min * 60 + settings.nonce_exp_s}
+    )
     data.update({"iat": time.time()})
     data.update({"iss": serialize_pk_hex()})
     return jwt.encode(data, PRIVATE_KEY, algorithm="RS256")

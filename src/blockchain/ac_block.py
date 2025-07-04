@@ -3,29 +3,29 @@ from __future__ import annotations
 import json
 from typing import Callable
 from .block import Block
-from datetime import datetime
+import time
 import pandas as pd
 import hashlib
 
 from .errors import ContractNotFound
 from .smart_contract import SmartContract
-from .ac_transaction import ACPolicy
+from .ac_transaction import ACResourcePolicy, ACIdentityPolicy
 
 
 class ACBlockBody:
     def __init__(
         self,
-        policies: list[ACPolicy] | dict[str, ACPolicy],
+        resource_policies: list[ACResourcePolicy] | dict[str, ACResourcePolicy],
         contract_header: pd.DataFrame | dict,
         events: pd.DataFrame | dict,
-        identity: pd.DataFrame | dict,
+        identity_policies: dict[str, dict[str, ACIdentityPolicy]],
     ):
-        if isinstance(policies, list) and not policies:
-            self.policies = {}
-        elif isinstance(policies, dict):
-            self.policies = policies
+        if isinstance(resource_policies, list) and not resource_policies:
+            self.resource_policies = {}
+        elif isinstance(resource_policies, dict):
+            self.resource_policies = resource_policies
         else:
-            self.policies = {policy.id: policy for policy in policies}
+            self.resource_policies = {policy.id: policy for policy in resource_policies}
 
         self.contract_header: pd.DataFrame = (
             contract_header
@@ -35,9 +35,8 @@ class ACBlockBody:
         self.events: pd.DataFrame = (
             events if isinstance(events, pd.DataFrame) else pd.DataFrame(events)
         )
-        self.identity: pd.DataFrame = (
-            identity if isinstance(identity, pd.DataFrame) else pd.DataFrame(identity)
-        )
+
+        self.identity_policies = identity_policies
 
     def __repr__(self) -> str:
         to_return = {}
@@ -55,22 +54,28 @@ class ACBlockBody:
     def __eq__(self, other) -> bool:
         if isinstance(other, ACBlockBody):
             return (
-                other.policies == self.policies
+                other.resource_policies == self.resource_policies
                 and other.contract_header.equals(self.contract_header)
-                and other.identity.equals(self.identity)
+                and other.identity_policies == self.identity_policies
                 and other.events.equals(self.events)
             )
         return NotImplemented
 
     def to_dict(self) -> dict:
-        return {
-            "policies": {
+        identities = {}
+        for user_id, policies in self.identity_policies.items():
+            identities[user_id] = {
                 policy_key: policy_val.model_dump()
-                for policy_key, policy_val in self.policies.items()
+                for policy_key, policy_val in policies.items()
+            }
+        return {
+            "resource_policies": {
+                policy_key: policy_val.model_dump()
+                for policy_key, policy_val in self.resource_policies.items()
             },
             "contract_header": self.contract_header.to_dict(),
             "events": self.events.to_dict(),
-            "identity": self.identity.to_dict(),
+            "identity_policies": identities,
         }
 
 
@@ -78,9 +83,11 @@ class ACBlock(Block):
     def __init__(
         self,
         index: int,
-        timestamp: datetime | str,
+        timestamp: time | str,
         previous_hash: str,
-        policies: list[ACPolicy] | None = None,
+        proof: int = 0,
+        resource_policies: list[ACResourcePolicy] | None = None,
+        identity_policies: dict[str, dict[str, ACIdentityPolicy]] | None = None,
         contract_header: pd.DataFrame = pd.DataFrame(
             columns=[
                 "timestamp",
@@ -98,18 +105,16 @@ class ACBlock(Block):
                 "transaction_type",
             ]
         ),
-        identity: pd.DataFrame = pd.DataFrame(
-            columns=["timestamp", "ip", "pk", "role", "nonce"]
-        ),
-        proof: int = 0,
         body: dict | ACBlockBody = None,
     ):
         super().__init__(index, timestamp, previous_hash, proof)
-        if policies is None:
-            policies = []
+        if resource_policies is None:
+            resource_policies = []
+        if identity_policies is None:
+            identity_policies = {}
         if not body:
             self.body: ACBlockBody = ACBlockBody(
-                policies, contract_header, events, identity
+                resource_policies, contract_header, events, identity_policies
             )
         else:
             self.body = body if isinstance(body, ACBlockBody) else ACBlockBody(**body)
@@ -137,7 +142,7 @@ class ACBlock(Block):
     def get_headers_keys(self) -> list:
         return [
             list(self.body.contract_header),
-            list(self.body.identity),
+            self.body.identity_policies,
             list(self.body.events),
         ]
 

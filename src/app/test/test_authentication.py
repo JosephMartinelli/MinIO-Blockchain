@@ -164,9 +164,58 @@ def test_obtain_jwt_all_good(private_key, public_key):
         "message": data,
         "signature": signature.hex(),
         "client_pk": encoded_pk,
+        "client_id": "an id",
+        "principal": "A principal",
+        "action": ["an action"],
+        "resources": ["a resource"],
+        "resource_data": ["a resource data"],
     }
     response = requests.post(
         url=f"{server}:{port}/authentication", data=json.dumps(payload)
     )
     assert response.status_code == 201, print(response.content)
     assert response.json()
+    print("\n", response.json())
+
+
+def test_check_auth(public_key, private_key):
+    encoded_pk = public_key.public_bytes(
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH,
+    ).hex()
+    challenge_request = {
+        "client_pk": encoded_pk,
+        "client_id": "An id",
+        "client_name": "A name",
+    }
+    response = requests.post(
+        url=f"{server}:{port}/authentication", data=json.dumps(challenge_request)
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["nonce"]
+    assert data["domain"]
+    assert data["expire"]
+    signature = sign_message(response.content, private_key)
+    payload = {
+        "message": data,
+        "signature": signature.hex(),
+        "client_id": "an id",
+        "client_pk": encoded_pk,
+        "principal": "A principal",
+        "action": ["an action"],
+        "resources": ["a resource"],
+        "resource_data": ["a resource data"],
+    }
+    response = requests.post(
+        url=f"{server}:{port}/authentication", data=json.dumps(payload)
+    )
+    assert response.status_code == 201, print(response.content)
+    assert response.json()
+    print("\n", response.json())
+    response = requests.post(
+        url=f"{server}:{port}/check-auth", data=json.dumps({"jwt": response.json()})
+    )
+    assert response.status_code == 200
+    assert response.json()
+    print("\n", response.json())

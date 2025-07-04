@@ -47,38 +47,36 @@ def load_contracts() -> pd.DataFrame:
     return pd.DataFrame(contract_data)
 
 
-# Here is a list of function that will be embedded in the blockchain
+# This contract is the main entry point for PAP operations
 def MAC(transactions: dict, block: ACBlock):
-    ppc_log = block.find_contract("PPC_log")
-    for tr in transactions:
-        if tr["transaction_type"] == "REQUEST_CHALLENGE":
-            pass
-        elif tr["transaction_type"] == "ADD_CONTRACT":
-            pass
-        elif tr["transaction_type"] == "AUTHORIZATION":
-            pass
-        ppc_log(tr, block)
-
-
-def PPC_log(request: dict, block: ACBlock) -> None:
-    """
-    This smart contract records requests onto the events header, tracking who requested what
-    :return:
-    """
     pass
 
 
-def PPC_challenge_message(block: ACBlock) -> str:
+def PAP_log(request: dict, block: ACBlock) -> None:
     """
-
-    :param block:
+    This smart contract records requests onto the events header, tracking what happened during mining
     :return:
     """
+    import pandas as pd
+    import time
+
+    to_append = pd.Series(
+        data=[
+            time.time(),
+            request["requester_id"],
+            request["requester_pk"],
+            request["transaction_type"],
+        ],
+        index=list(block.body.events),
+    )
+    block.body.events = pd.concat(
+        [block.body.events, to_append.to_frame().T], ignore_index=True
+    )
 
 
-def PPC_attach_policy():
+def PAP_attach_policy():
     pass
 
 
-def PPC_detach_policy():
+def PAP_detach_policy():
     pass

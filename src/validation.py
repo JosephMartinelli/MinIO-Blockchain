@@ -43,12 +43,27 @@ class ChallengeResponse(BaseModel):
     expire: float
 
 
-class UserSignedMessage(BaseModel):
+class UserSignedRequestAccess(BaseModel):
     message: ChallengeResponse
+    client_id: str
     client_pk: str  # Hex format
     signature: str  # Hex format
+    # The following data will be encoded in the JWT and sent to MinIO
+    principal: str  # The user, role, or federated user principal that sent the request.
+    # Information about the principal includes the policies that are associated with that principal.
+    action: list[str]
+    resources: list[str]
+    resource_data: list[str]
 
 
-class AccessRequest(BaseModel):
+class AccessResponse(BaseModel):
     action: list[str]
     resource: str
+
+
+class CheckAuth(BaseModel):
+    jwt: str
+
+
+class AccessRequest(CheckAuth):
+    pass

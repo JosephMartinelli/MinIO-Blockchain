@@ -1,17 +1,20 @@
 import json
 import time
 
+import requests
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 
 from ..dependency import get_peers, get_blockchain
-from validation import ChallengeRequest, ChallengeResponse, UserSignedMessage
+from validation import (
+    ChallengeRequest,
+    ChallengeResponse,
+    UserSignedRequestAccess,
+    CheckAuth,
+)
 from typing import Annotated
 from ..security import get_mem_nonce, get_security_settings, SecuritySettings
-from ..security import (
-    verify_user_message,
-    create_access_token,
-)
+from ..security import verify_user_message, create_access_token, decode_access_token
 import secrets
 from cryptography.exceptions import InvalidSignature
 
@@ -31,8 +34,8 @@ security_settings_dep = Annotated[SecuritySettings, Depends(get_security_setting
 @router.post(
     path="/authentication", response_model=ChallengeResponse | dict, status_code=200
 )
-def challenge(
-    client: ChallengeRequest | UserSignedMessage,
+async def challenge(
+    client: ChallengeRequest | UserSignedRequestAccess,
     mem_nonces: nonce_dependency,
     settings: security_settings_dep,
 ):
@@ -76,7 +79,7 @@ def challenge(
         except ValueError:
             return JSONResponse(
                 status_code=400,
-                content="Signature must be passed as a valid hex string",
+                content="Signature/public key must be passed as a valid hex string",
             )
         except InvalidSignature:
             return JSONResponse(status_code=403, content="Invalid signature!")
@@ -85,6 +88,30 @@ def challenge(
         # Issue JWT
         payload = {
             "sub": client_signed_message["client_pk"],
+            "client_id": client_signed_message["client_id"],
             "role": "user",
+            "principal": client_signed_message["principal"],
+            "action": client_signed_message["action"],
+            "resources": client_signed_message["resources"],
+            "resource_data": client_signed_message["resource_data"],
         }
         return JSONResponse(status_code=201, content=create_access_token(payload))
+
+
+@router.post("/check-auth", status_code=200)
+async def check_authentication(jwt: CheckAuth, peers: peers_dependency) -> dict:
+    is_auth = True
+    try:
+        decoded_jwt = decode_access_token(jwt.model_dump()["jwt"])
+    except InvalidSignature:
+        for peer in peers:
+            try:
+                response = requests.post(
+                    url=f"http://{peer}/check-auth", data=jwt.model_dump_json()
+                )
+            except requests.exceptions.ConnectionError:
+                continue
+            if response.status_code == 200 and response.json()["result"] == True:
+                return {"result": True}
+        is_auth = False
+    return {"result": is_auth}

@@ -11,14 +11,23 @@ import pandas as pd
 from copy import deepcopy
 
 from ..smart_contract import SmartContract
-from ..ac_transaction import ACPolicy, Statement
+from ..ac_transaction import (
+    ACResourcePolicy,
+    ACIdentityPolicy,
+    ACIdentityStatement,
+    ACResourceStatement,
+)
 
 from pydantic_core._pydantic_core import ValidationError
 
 blockchain = ACBlockchain(difficulty=3)
-mock_statements = {
-    f"{i}": Statement(
-        version="A version", sid=f"{i}", effect="Allow", resource="A resource"
+mock_resource_statements = {
+    f"{i}": ACResourceStatement(
+        version="A version",
+        sid=f"{i}",
+        effect="Allow",
+        resource="A resource",
+        principal=f"principal{i}",
     )
     for i in range(10)
 }
@@ -42,70 +51,96 @@ mock_events: pd.DataFrame = pd.DataFrame(
     }
 )
 
-mock_identity: pd.DataFrame = pd.DataFrame(
-    data={
-        "timestamp": ["a timestamp" for i in range(10)],
-        "ip": ["an ip" for i in range(10)],
-        "pk": ["a pk" for i in range(10)],
-        "role": ["a role" for i in range(10)],
-        "nonce": ["a nonce" for i in range(10)],
+mock_identity_statements = {
+    f"{i}": ACIdentityStatement(
+        version="A version", sid=f"{i}", effect="Allow", resource="A resource"
+    )
+    for i in range(10)
+}
+
+
+@pytest.fixture
+def resource_statements():
+    return deepcopy(mock_resource_statements)
+
+
+@pytest.fixture
+def identity_statements():
+    return deepcopy(mock_identity_statements)
+
+
+@pytest.fixture
+def resource_policy(resource_statements):
+    return ACResourcePolicy(id="An id", action="add", statements=resource_statements)
+
+
+@pytest.fixture
+def identity_policy(identity_statements):
+    return {
+        "principal_id": {
+            "policy_id": ACIdentityPolicy(
+                id="An id", action="add", statements=identity_statements
+            )
+        }
     }
-)
-
-
-@pytest.fixture
-def statements():
-    return deepcopy(mock_statements)
-
-
-@pytest.fixture
-def policy(statements):
-    return ACPolicy(id="An id", action="add", statements=statements)
 
 
 @pytest.fixture
 def headers():
-    return (
-        deepcopy(mock_contract_header),
-        deepcopy(mock_events),
-        deepcopy(mock_identity),
-    )
+    return (deepcopy(mock_contract_header), deepcopy(mock_events))
 
 
 def random_headers(headers):
-    contract, events, identity = headers
+    contract, events = headers
     return (
         contract.sample(frac=0.5),
         events.sample(frac=0.5),
-        identity.sample(frac=0.5),
     )
 
 
-def random_statements():
-    random_sts = random.sample(list(deepcopy(mock_statements).values()), 5)
+def random_resource_statements():
+    random_sts = random.sample(list(deepcopy(mock_resource_statements).values()), 5)
     return {random_st.sid: random_st for random_st in random_sts}
 
 
-def random_policies():
+def random_identity_statements():
+    random_sts = random.sample(list(deepcopy(mock_identity_statements).values()), 5)
+    return {random_st.sid: random_st for random_st in random_sts}
+
+
+def random_resource_policies():
     return [
-        ACPolicy(id=str(i), action="add", statements=random_statements())
-        for i in range(random.randint(0, 10))
+        ACResourcePolicy(
+            id=str(i), action="add", statements=random_resource_statements()
+        )
+        for i in range(random.randint(1, 10))
     ]
 
 
+def random_identity_policies():
+    return {
+        "a principal id": {
+            f"{i}": ACIdentityPolicy(
+                id=str(i), action="add", statements=random_identity_statements()
+            )
+            for i in range(random.randint(1, 10))
+        }
+    }
+
+
 @pytest.fixture
-def chain_with_blocks(headers, policy) -> ACBlockchain:
+def chain_with_blocks(headers) -> ACBlockchain:
     chain = ACBlockchain(difficulty=2)
     for i in range(10):
-        contract, events, identity = random_headers(headers)
+        contract, events = random_headers(headers)
         block = ACBlock(
             index=chain.get_last_bloc.index + 1,
             timestamp=datetime.datetime.now(),
             previous_hash=chain.get_last_bloc.compute_hash(),
-            policies=random_policies(),
+            resource_policies=random_resource_policies(),
             contract_header=contract,
             events=events,
-            identity=identity,
+            identity_policies=random_identity_policies(),
         )
         chain.proof_of_work(block)
         chain.add_block(block)
@@ -124,15 +159,6 @@ def append_to_contract_header(df: pd.DataFrame, func: Callable) -> pd.DataFrame:
         index=list(df),
     )
     return pd.concat([df, to_append.to_frame().T], ignore_index=True)
-
-
-## Cleanup function
-@pytest.fixture(autouse=True)
-def cleanup():
-    global blockchain
-    yield
-    blockchain.unconfirmed_transactions = []
-    del blockchain.chain[1:]
 
 
 def test_genesis_block_creation():
@@ -168,34 +194,34 @@ def test_proof_of_work_no_data():
     assert block.proof != 0
 
 
-def test_digest_proof_with_dataframes(policy, headers):
-    contract, events, identity = headers
+def test_digest_proof_with_dataframes(resource_policy, identity_policy, headers):
+    contract, events = headers
     block = ACBlock(
         index=50,
         timestamp="10",
         previous_hash="100",
-        policies=[policy],
+        resource_policies=[resource_policy],
         contract_header=contract,
         events=events,
-        identity=identity,
+        identity_policies=identity_policy,
     )
     assert ACBlockchain.digest_proof_and_transactions(
         1, block.proof, block.proof, block.body
     )
 
 
-def test_mine_no_mac(policy):
+def test_mine_no_mac(resource_policy):
     global blockchain
-    blockchain.add_new_transaction([policy])
+    blockchain.add_new_transaction([resource_policy])
     with pytest.raises(ContractNotFound):
         blockchain.mine()
 
 
-def test_mine_with_mac_contract_error(policy, headers):
+def test_mine_with_mac_contract_error(resource_policy, identity_policy, headers):
     def MAC(data: dict, block: ACBlock) -> tuple:
         raise ArithmeticError
 
-    contract, events, identity = headers
+    contract, events = headers
     contract = append_to_contract_header(contract, MAC)
     # Creating a genesis block and adding it
     genesis = ACBlock(
@@ -204,15 +230,15 @@ def test_mine_with_mac_contract_error(policy, headers):
         timestamp=datetime.datetime.now(),
         contract_header=contract,
         events=events,
-        identity=identity,
+        identity_policies=identity_policy,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([policy])
+    local_chain.add_new_transaction([resource_policy])
     with pytest.raises(InvalidChain):
         local_chain.mine()
 
 
-def test_mine_mac_log_effect(headers, policy):
+def test_mine_mac_log_effect(headers, resource_policy, identity_policy):
     def MAC(data: dict, block: ACBlock) -> None:
         import pandas as pd
         import datetime
@@ -240,7 +266,7 @@ def test_mine_mac_log_effect(headers, policy):
             ignore_index=True,
         )
 
-    contract, events, identity = headers
+    contract, events = headers
     contract = append_to_contract_header(contract, MAC)
     # Creating a genesis block and adding it
     genesis = ACBlock(
@@ -249,10 +275,10 @@ def test_mine_mac_log_effect(headers, policy):
         timestamp=datetime.datetime.now(),
         contract_header=contract,
         events=events,
-        identity=identity,
+        identity_policies=identity_policy,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([policy])
+    local_chain.add_new_transaction([resource_policy])
     last_block = local_chain.get_last_bloc
     assert local_chain.mine()
     # Now we check if the events table has been modified and the block has been added
@@ -263,7 +289,7 @@ def test_mine_mac_log_effect(headers, policy):
     assert not df.loc[df["transaction_type"] == "AUTHENTICATION"].empty
 
 
-def test_mac_calling_other_contracts(headers, policy):
+def test_mac_calling_other_contracts(headers, resource_policy, identity_policy):
     def MAC(data: dict, block: ACBlock):
         import pandas as pd
 
@@ -280,7 +306,7 @@ def test_mac_calling_other_contracts(headers, policy):
     def PDC(data: dict, block: ACBlock):
         return True
 
-    contract, events, identity = headers
+    contract, events = headers
     contract = append_to_contract_header(contract, MAC)
     contract = append_to_contract_header(contract, PDC)
     # Creating a genesis block and adding it
@@ -290,14 +316,14 @@ def test_mac_calling_other_contracts(headers, policy):
         timestamp=datetime.datetime.now(),
         contract_header=contract,
         events=events,
-        identity=identity,
+        identity_policies=identity_policy,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([policy])
+    local_chain.add_new_transaction([resource_policy])
     assert local_chain.mine()
 
 
-def test_mac_calling_other_contracts_error(headers, policy):
+def test_mac_calling_other_contracts_error(headers, resource_policy, identity_policy):
     def MAC(data: dict, block: ACBlock):
         import pandas as pd
 
@@ -314,7 +340,7 @@ def test_mac_calling_other_contracts_error(headers, policy):
     def PDC(data: dict, block: ACBlock):
         return False
 
-    contract, events, identity = headers
+    contract, events = headers
     contract = append_to_contract_header(contract, MAC)
     contract = append_to_contract_header(contract, PDC)
     # Creating a genesis block and adding it
@@ -324,15 +350,17 @@ def test_mac_calling_other_contracts_error(headers, policy):
         timestamp=datetime.datetime.now(),
         contract_header=contract,
         events=events,
-        identity=identity,
+        identity_policies=identity_policy,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([policy])
+    local_chain.add_new_transaction([resource_policy])
     with pytest.raises(InvalidChain):
         local_chain.mine()
 
 
-def test_mac_calling_other_contracts_headers_can_be_modified(headers, policy):
+def test_mac_calling_other_contracts_headers_can_be_modified(
+    headers, resource_policy, identity_policy
+):
     def MAC(data: dict, block: ACBlock):
         import pandas as pd
 
@@ -374,7 +402,7 @@ def test_mac_calling_other_contracts_headers_can_be_modified(headers, policy):
         )
         return True
 
-    contract, events, identity = headers
+    contract, events = headers
     contract = append_to_contract_header(contract, MAC)
     contract = append_to_contract_header(contract, PDC)
     # Creating a genesis block and adding it
@@ -384,65 +412,75 @@ def test_mac_calling_other_contracts_headers_can_be_modified(headers, policy):
         timestamp=datetime.datetime.now(),
         contract_header=contract,
         events=events,
-        identity=identity,
+        identity_policies=identity_policy,
     )
     local_chain = ACBlockchain(difficulty=2, genesis_block=genesis)
-    local_chain.add_new_transaction([policy])
+    local_chain.add_new_transaction([resource_policy])
     assert local_chain.mine()
     df = local_chain.get_last_bloc.body.events
     assert not df.loc[df["transaction_type"] == "AUTHORIZATION"].empty
 
 
-def test_policy_add(policy):
+def test_policy_add(resource_policy):
     mem_policies = {}
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={resource_policy.id: resource_policy},
+        mem_policies=mem_policies,
     )
-    assert mem_policies[policy.id]
+    assert mem_policies[resource_policy.id]
 
 
-def test_policy_remove(policy):
+def test_policy_remove(resource_policy):
     mem_policies = {}
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={resource_policy.id: resource_policy},
+        mem_policies=mem_policies,
     )
-    blockchain.apply_policy_delta(
-        block_policies={"Another id": policy}, mem_policies=mem_policies
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={"Another id": resource_policy},
+        mem_policies=mem_policies,
     )
-    policy.action = "remove"
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    resource_policy.action = "remove"
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={resource_policy.id: resource_policy},
+        mem_policies=mem_policies,
     )
-    assert mem_policies.get(policy.id) is None
+    assert mem_policies.get(resource_policy.id) is None
 
 
-def test_policy_update_remove_statement(statements, policy):
+def test_policy_update_remove_statement(resource_statements, resource_policy):
     mem_policies = {}
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={resource_policy.id: resource_policy},
+        mem_policies=mem_policies,
     )
-    to_remove_statements = random.sample(list(statements.values()), k=4)
+    to_remove_statements = random.sample(list(resource_statements.values()), k=4)
     for statement in to_remove_statements:
         statement.action = "remove"
-    policy = ACPolicy(id=policy.id, action="update", statements=statements)
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    policy = ACResourcePolicy(
+        id=resource_policy.id, action="update", statements=resource_statements
+    )
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={policy.id: policy}, mem_policies=mem_policies
     )
     for statement in to_remove_statements:
         assert mem_policies[policy.id].statements.get(statement.sid, None) is None
 
 
-def test_policy_substitution_statement(statements, policy):
+def test_policy_substitution_statement(resource_statements, resource_policy):
     mem_policies = {}
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={resource_policy.id: resource_policy},
+        mem_policies=mem_policies,
     )
-    to_modify_statements = random.sample(list(statements.values()), k=4)
+    to_modify_statements = random.sample(list(resource_statements.values()), k=4)
     for statement in to_modify_statements:
         statement.effect = "Deny"
-    policy = ACPolicy(id="An id", action="update", statements=statements)
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    policy = ACResourcePolicy(
+        id="An id", action="update", statements=resource_statements
+    )
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={policy.id: policy}, mem_policies=mem_policies
     )
     for statement in to_modify_statements:
         modified_statement = mem_policies[policy.id].statements.get(statement.sid, None)
@@ -450,32 +488,38 @@ def test_policy_substitution_statement(statements, policy):
         assert modified_statement.effect == "Deny"
 
 
-def test_policy_append_statements(statements, policy):
+def test_policy_append_statements(resource_statements, resource_policy):
     mem_policies = {}
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={resource_policy.id: resource_policy},
+        mem_policies=mem_policies,
     )
     to_append = {
-        "100": Statement(
+        "100": ACResourceStatement(
             version="A version", sid="100", effect="Deny", resource="A resource"
         )
     }
-    policy = ACPolicy(id="An id", action="update", statements=to_append)
-    blockchain.apply_policy_delta(
-        block_policies={policy.id: policy}, mem_policies=mem_policies
+    policy = ACResourcePolicy(id="An id", action="update", statements=to_append)
+    blockchain.apply_resource_policy_delta(
+        block_resource_policies={policy.id: policy}, mem_policies=mem_policies
     )
     retrieved_statement = mem_policies[policy.id].statements.get("100", None)
     assert retrieved_statement
     assert retrieved_statement.effect == "Deny"
 
 
-def test_bad_policy_create_blockchain_from_request(policy, headers, chain_with_blocks):
+def test_bad_policy_create_blockchain_from_request(
+    resource_policy, headers, chain_with_blocks
+):
     # We get a chain, and we convert it to a string
     str_chain: list[dict] = [block.to_dict() for block in chain_with_blocks.chain]
+    assert len(str_chain) > 2
     # Modify random elem
     for block in random.sample(str_chain, k=2):
-        r_policies: ACPolicy = random.sample(
-            list(block["body"]["policies"].values()), 1
+        if not list(block["body"]["resource_policies"].values()):
+            continue
+        r_policies: ACResourcePolicy = random.sample(
+            list(block["body"]["resource_policies"].values()), 1
         )
         list(r_policies[0]["statements"].values())[0]["version"] = 10
     local_chain = ACBlockchain(difficulty=chain_with_blocks.difficulty)
@@ -483,7 +527,7 @@ def test_bad_policy_create_blockchain_from_request(policy, headers, chain_with_b
         local_chain.create_blockchain_from_request(str_chain)
 
 
-def test_create_blockchain_from_request(policy, headers, chain_with_blocks):
+def test_create_blockchain_from_request(resource_policy, headers, chain_with_blocks):
     # We get a chain, and we convert it to a string
     str_chain: list[dict] = [block.to_dict() for block in chain_with_blocks.chain]
     local_chain = ACBlockchain(difficulty=chain_with_blocks.difficulty)
@@ -494,7 +538,7 @@ def test_create_blockchain_from_request(policy, headers, chain_with_blocks):
 
 
 def test_create_blockchain_from_request_can_decode_contracts(
-    policy, headers, chain_with_blocks
+    resource_policy, headers, chain_with_blocks, identity_policy
 ):
     # We get a chain, and we convert it to a string
     def MAC(data: dict, block: ACBlock) -> None:
@@ -524,7 +568,7 @@ def test_create_blockchain_from_request_can_decode_contracts(
             ignore_index=True,
         )
 
-    contract, events, identity = headers
+    contract, events = headers
     contract = append_to_contract_header(contract, MAC)
     new_block = ACBlock(
         index=chain_with_blocks.get_last_bloc.index + 1,
@@ -537,13 +581,13 @@ def test_create_blockchain_from_request_can_decode_contracts(
     str_chain: list[dict] = [block.to_dict() for block in chain_with_blocks.chain]
     local_chain = ACBlockchain(difficulty=chain_with_blocks.difficulty)
     assert local_chain.create_blockchain_from_request(str_chain)
-    assert len(local_chain.chain) > 1
+    assert len(local_chain.chain) == len(chain_with_blocks.chain)
     for local_block, original_block in zip(local_chain.chain, chain_with_blocks.chain):
         assert local_block == original_block
     # We check that the contract MAC is present and decodable
     assert local_chain.get_last_bloc.find_contract("MAC")
     # We add some transactions, and we check that the MAC can be executed during mining operations
-    local_chain.add_new_transaction(random_policies())
+    local_chain.add_new_transaction(random_resource_policies())
     assert local_chain.mine()
     df = local_chain.get_last_bloc.body.events
     assert not df.loc[df["transaction_type"] == "AUTHENTICATION"].empty

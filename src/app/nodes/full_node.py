@@ -50,6 +50,29 @@ async def get_chain(blockchain: blockchain_dependency) -> dict:
     }
 
 
+@router.get("/register-peer", status_code=200)
+async def register_peer(
+    request: Request, peers: peers_dependency, blockchain: blockchain_dependency
+):
+    """
+    This function adds a new peer to the current node by inserting it into the set of his peers
+    :return:
+    """
+    to_return_peers = peers.copy()
+    if not peers.intersection(f"{request.client.host}:{request.client.port}"):
+        peers.add(f"{request.client.host}:{request.client.port}")
+    else:
+        return JSONResponse(
+            status_code=400, content="Client already present into peers!"
+        )
+    chain_data: dict = await get_chain(blockchain)
+    return {
+        "chain": chain_data["chain"],
+        "difficulty": chain_data["difficulty"],
+        "peers": list(to_return_peers),
+    }
+
+
 @router.post("/add-policy", status_code=201)
 async def add_new_policy(
     policy: ACPolicy,
@@ -100,7 +123,7 @@ async def update_local_cache(
     :return:
     """
     for block in blockchain.chain:
-        blockchain.apply_policy_delta(block.body.policies, mem_policies)
+        blockchain.apply_resource_policy_delta(block.body.policies, mem_policies)
 
 
 @router.get("/mine", status_code=200)
@@ -203,29 +226,6 @@ async def add_block(
             new_unconfirmed_transactions.append(policy)
     blockchain.unconfirmed_transactions = new_unconfirmed_transactions
     return JSONResponse(status_code=201, content="Block added successfully")
-
-
-@router.get("/register-peer", status_code=200)
-async def register_peer(
-    request: Request, peers: peers_dependency, blockchain: blockchain_dependency
-):
-    """
-    This function adds a new peer to the current node by inserting it into the set of his peers
-    :return:
-    """
-    to_return_peers = peers.copy()
-    if not peers.intersection(f"{request.client.host}:{request.client.port}"):
-        peers.add(f"{request.client.host}:{request.client.port}")
-    else:
-        return JSONResponse(
-            status_code=400, content="Client already present into peers!"
-        )
-    chain_data: dict = await get_chain(blockchain)
-    return {
-        "chain": chain_data["chain"],
-        "difficulty": chain_data["difficulty"],
-        "peers": list(to_return_peers),
-    }
 
 
 @router.post(path="/register-with-node", status_code=200)
