@@ -1,20 +1,23 @@
 import json
 import time
 
-import requests
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 
 from ..dependency import get_peers, get_blockchain
-from validation import (
+from ..ac_validation import (
     ChallengeRequest,
     ChallengeResponse,
     UserSignedRequestAccess,
-    CheckAuth,
 )
 from typing import Annotated
 from ..security import get_mem_nonce, get_security_settings, SecuritySettings
-from ..security import verify_user_message, create_access_token, decode_access_token
+from ..security import (
+    verify_user_message,
+    create_access_token,
+    decode_access_token,
+    decode_and_verify_jwt_signature,
+)
 import secrets
 from cryptography.exceptions import InvalidSignature
 
@@ -31,15 +34,21 @@ nonce_dependency = Annotated[dict, Depends(get_mem_nonce)]
 security_settings_dep = Annotated[SecuritySettings, Depends(get_security_settings)]
 
 
-@router.post(
-    path="/authentication", response_model=ChallengeResponse | dict, status_code=200
-)
+@router.head(path="/auth", status_code=200)
+async def is_alive():
+    return {}
+
+
+@router.post(path="/auth", response_model=ChallengeResponse | dict, status_code=200)
 async def challenge(
-    client: ChallengeRequest | UserSignedRequestAccess,
     mem_nonces: nonce_dependency,
     settings: security_settings_dep,
+    client: (
+        ChallengeRequest | UserSignedRequestAccess | None
+    ) = None,  # This means that an empty body might be sent ( it is the case of MinIO POST)
+    token: str | None = None,
 ):
-    if isinstance(client, ChallengeRequest):
+    if isinstance(client, ChallengeRequest) and token is None:
         client_challenge_info: dict = client.model_dump()
         expiration = time.time() + settings.nonce_exp_min * 60 + settings.nonce_exp_s
         nonce = secrets.token_hex(settings.nonce_size)
@@ -52,7 +61,7 @@ async def challenge(
                 "expire": expiration,
             },
         )
-    else:
+    elif isinstance(client, UserSignedRequestAccess) and token is None:
         client_signed_message: dict = client.model_dump()
         mem_data = mem_nonces.get(client_signed_message["client_pk"], None)
         if mem_data is None:
@@ -90,28 +99,28 @@ async def challenge(
             "sub": client_signed_message["client_pk"],
             "client_id": client_signed_message["client_id"],
             "role": "user",
-            "principal": client_signed_message["principal"],
-            "action": client_signed_message["action"],
-            "resources": client_signed_message["resources"],
-            "resource_data": client_signed_message["resource_data"],
         }
         return JSONResponse(status_code=201, content=create_access_token(payload))
+    elif token:
+        # TODO: A check should be done here to see if the iss is a known and authorized node in the network
+        try:
+            decoded_token = decode_and_verify_jwt_signature(token)
+        except InvalidSignature:
+            return JSONResponse(
+                status_code=403, content={"reason": "Invalid signature"}
+            )
+        return {
+            "user": decoded_token["client_id"],
+            # TODO: This should be dealt better and it must be between 900 and 31536000
+            "maxValiditySeconds": 86000,
+            "claims": {
+                "policy": "read_and_write",
+                "client_id": decoded_token["client_id"],
+                "sub": decoded_token["sub"],
+            },
+        }
+    else:
+        return JSONResponse(status_code=200, content="")
 
 
-@router.post("/check-auth", status_code=200)
-async def check_authentication(jwt: CheckAuth, peers: peers_dependency) -> dict:
-    is_auth = True
-    try:
-        decoded_jwt = decode_access_token(jwt.model_dump()["jwt"])
-    except InvalidSignature:
-        for peer in peers:
-            try:
-                response = requests.post(
-                    url=f"http://{peer}/check-auth", data=jwt.model_dump_json()
-                )
-            except requests.exceptions.ConnectionError:
-                continue
-            if response.status_code == 200 and response.json()["result"] == True:
-                return {"result": True}
-        is_auth = False
-    return {"result": is_auth}
+# TODO: Define automatic scheduling procedure that when a JWT expiration triggers a mining operation

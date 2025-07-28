@@ -5,12 +5,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
-
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 import requests
 import os
 import pytest
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 port = os.environ.get("port", 8000)
 server = "http://" + os.environ.get("server", "localhost")
@@ -165,10 +164,6 @@ def test_obtain_jwt_all_good(private_key, public_key):
         "signature": signature.hex(),
         "client_pk": encoded_pk,
         "client_id": "an id",
-        "principal": "A principal",
-        "action": ["an action"],
-        "resources": ["a resource"],
-        "resource_data": ["a resource data"],
     }
     response = requests.post(
         url=f"{server}:{port}/authentication", data=json.dumps(payload)

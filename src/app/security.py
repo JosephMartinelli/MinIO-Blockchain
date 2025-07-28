@@ -114,8 +114,36 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(data, PRIVATE_KEY, algorithm="RS256")
 
 
-def decode_access_token(encoded_jwt: str) -> dict:
-    return jwt.decode(encoded_jwt, PUBLIC_KEY, algorithms=["RS256"])
+def decode_and_verify_jwt_signature(token: str):
+    decoded_jwt = decode_complete_access_token(token, verify_signature=False)
+    user_pk: RSAPublicKey = load_ssh_public_key(
+        bytes.fromhex(decoded_jwt["payload"]["iss"])
+    )
+    return jwt.decode(token, user_pk, algorithms=["RS256"])
+
+
+def decode_access_token(encoded_jwt: str, verify_signature: bool = True) -> dict:
+    if verify_signature:
+        return jwt.decode(encoded_jwt, PUBLIC_KEY, algorithms=["RS256"])
+    return jwt.decode(
+        encoded_jwt,
+        PUBLIC_KEY,
+        algorithms=["RS256"],
+        options={"verify_signature": False},
+    )
+
+
+def decode_complete_access_token(
+    encoded_jwt: str, verify_signature: bool = True
+) -> dict:
+    if verify_signature:
+        return jwt.decode_complete(encoded_jwt, PUBLIC_KEY, algorithms=["RS256"])
+    return jwt.decode_complete(
+        encoded_jwt,
+        PUBLIC_KEY,
+        algorithms=["RS256"],
+        options={"verify_signature": False},
+    )
 
 
 def get_mem_nonce():

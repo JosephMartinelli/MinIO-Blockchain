@@ -48,6 +48,7 @@ def load_contracts() -> pd.DataFrame:
 
 
 # This contract is the main entry point for PAP operations
+# TODO: Define all smart contract operations here
 def MAC(transactions: dict, block: ACBlock):
     pass
 

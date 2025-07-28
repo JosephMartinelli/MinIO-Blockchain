@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings(
-    node_role=os.environ.get("NODE_ROLE", "light"),
+    node_role=os.environ.get("NODE_ROLE", "publisher"),
     port=os.environ.get("PORT", 8000),
     chain_difficulty=os.environ.get("CHAIN_DIFFICULTY", 3),
     peers=os.environ.get("PEERS", ""),

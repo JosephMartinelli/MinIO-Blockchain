@@ -9,11 +9,7 @@ from starlette.responses import JSONResponse
 from blockchain.ac_blockchain import ACBlockchain
 from blockchain.errors import NoTransactionsFound, InvalidChain
 from blockchain.ac_block import ACBlock
-from validation import (
-    InputBlock,
-    RegisterNode,
-)
-from ..ac_validation import ACPolicy
+from ..ac_validation import ACPolicy, RegisterNode, InputBlock
 
 from ..dependency import (
     get_peers,

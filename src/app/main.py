@@ -1,11 +1,11 @@
 from fastapi import FastAPI
-from app.nodes import light_node, full_node, authentication
+from app.nodes import light_node, full_node, authentication, authorization
 from app.config import NodeRole, settings
 from contextlib import asynccontextmanager
 
-from onstartup_contracts import load_contracts
-from policy_util import load_policies
-from dependency import set_global_chain, get_blockchain, get_logger
+from app.onstartup_contracts import load_contracts
+from app.policy_util import load_policies
+from app.dependency import set_global_chain, get_blockchain, get_logger
 
 from blockchain.ac_blockchain import ACBlock, ACBlockchain
 from blockchain.ac_transaction import ACPolicy
@@ -62,6 +62,7 @@ if settings.node_role == NodeRole.PUBLISHER:
     app.include_router(full_node.router)
     app.include_router(light_node.router)
     app.include_router(authentication.router)
+    app.include_router(authorization.router)
 else:
     app.include_router(light_node.router)
 
